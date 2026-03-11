@@ -70,4 +70,6 @@ jobs:
           app-name: 'vance'
           slot-name: 'Production'
           package: release.zip
+          enable-oryx-build: false
+          scm-do-build-during-deployment: false
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4039FC4023204AF0BCBF4E6713A81172 }}
