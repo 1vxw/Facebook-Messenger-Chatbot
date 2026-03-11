@@ -3,10 +3,9 @@
 	"version": "1.5.35",
 	"description": "A simple Bot chat messenger using personal account.",
 	"main": "index.js",
-	"engines": {
-		"node": "16.x",
-		"npm": ">=7.0.0"
-	},
+"engines": {
+  "node": ">=20 <21"
+},
 	"dependencies": {
 		"@distube/ytdl-core": "^4.14.4",
 		"@dongdev/fca-unofficial": "^3.0.31",
