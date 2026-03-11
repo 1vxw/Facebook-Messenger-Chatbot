@@ -1,91 +1,25 @@
 const fs = require("fs-extra");
 const path = require("path");
 const axios = require("axios");
-const { google } = require("googleapis");
+const crypto = require("crypto");
 const { Readable } = require("stream");
 const { Document, Packer, Paragraph } = require("docx");
 const PDFDocument = require("pdfkit");
+const {
+	OAUTH_SCOPES,
+	DEFAULT_OAUTH_REDIRECT_URI,
+	createOAuthClient,
+	getUserToken,
+	removeUserToken,
+	getClientsForUser,
+	exchangeAuthCodeForUser
+} = require("./gclassAuth");
 
 const DOWNLOAD_DIR = path.join(__dirname, "tmp", "classroom");
-const TOKENS_FILE = path.join(process.cwd(), "database", "data", "classroomUserTokens.json");
-const OAUTH_REDIRECT_URI = "https://developers.google.com/oauthplayground";
-const OAUTH_SCOPES = [
-	"https://www.googleapis.com/auth/drive.file",
-	"https://www.googleapis.com/auth/drive.readonly",
-	"https://www.googleapis.com/auth/classroom.courses.readonly",
-	"https://www.googleapis.com/auth/classroom.coursework.me.readonly",
-	"https://www.googleapis.com/auth/classroom.coursework.me",
-	"https://www.googleapis.com/auth/classroom.student-submissions.me.readonly"
-];
 
 if (!global.temp)
 	global.temp = {};
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-
-function getOAuthBaseConfig() {
-	const gmailCfg = global?.GoatBot?.config?.credentials?.gmailAccount || {};
-	return {
-		clientId: gmailCfg.clientId || "",
-		clientSecret: gmailCfg.clientSecret || ""
-	};
-}
-
-function createOAuthClient() {
-	const { clientId, clientSecret } = getOAuthBaseConfig();
-	return new google.auth.OAuth2(clientId, clientSecret, OAUTH_REDIRECT_URI);
-}
-
-async function loadTokenStore() {
-	await fs.ensureFile(TOKENS_FILE);
-	let raw = await fs.readFile(TOKENS_FILE, "utf8");
-	if (!raw.trim()) {
-		await fs.writeFile(TOKENS_FILE, "{}", "utf8");
-		raw = "{}";
-	}
-	try {
-		const data = JSON.parse(raw);
-		return data && typeof data === "object" ? data : {};
-	}
-	catch (_e) {
-		return {};
-	}
-}
-
-async function saveTokenStore(data) {
-	await fs.ensureDir(path.dirname(TOKENS_FILE));
-	await fs.writeFile(TOKENS_FILE, JSON.stringify(data, null, 2), "utf8");
-}
-
-async function getUserToken(senderID) {
-	const store = await loadTokenStore();
-	return store[String(senderID)] || null;
-}
-
-async function setUserToken(senderID, token) {
-	const store = await loadTokenStore();
-	store[String(senderID)] = token;
-	await saveTokenStore(store);
-}
-
-async function removeUserToken(senderID) {
-	const store = await loadTokenStore();
-	delete store[String(senderID)];
-	await saveTokenStore(store);
-}
-
-async function getClientsForUser(senderID) {
-	const token = await getUserToken(senderID);
-	if (!token)
-		return null;
-
-	const auth = createOAuthClient();
-	auth.setCredentials(token);
-	return {
-		classroom: google.classroom({ version: "v1", auth }),
-		drive: google.drive({ version: "v3", auth }),
-		auth
-	};
-}
 
 function isInvalidGrantError(err) {
 	const msg = String(
@@ -114,6 +48,53 @@ function getStateBucket(senderID, threadID) {
 	if (!state[key])
 		state[key] = {};
 	return state[key];
+}
+
+function ensureConnectSessions() {
+	if (!global.temp.gclassConnectSessions)
+		global.temp.gclassConnectSessions = {};
+	return global.temp.gclassConnectSessions;
+}
+
+function getPublicBaseUrl() {
+	const candidates = [
+		process.env.PUBLIC_URL,
+		global?.GoatBot?.dashboardPublicBaseUrl
+	].filter(Boolean);
+	if (!candidates.length)
+		return "";
+	return String(candidates[0]).replace(/\/+$/, "");
+}
+
+function createConnectLink(senderID) {
+	const baseUrl = getPublicBaseUrl();
+	if (!baseUrl)
+		return null;
+
+	const token = crypto.randomBytes(24).toString("hex");
+	const sessions = ensureConnectSessions();
+	sessions[token] = {
+		senderID: String(senderID),
+		expiresAt: Date.now() + 10 * 60 * 1000
+	};
+
+	return `${baseUrl}/gclass/connect?sid=${encodeURIComponent(String(senderID))}&token=${encodeURIComponent(token)}`;
+}
+
+function getConnectPrompt(getLang, senderID) {
+	const link = createConnectLink(senderID);
+	if (link)
+		return getLang("connectLinkReady", link);
+	return getLang("connectFallbackManual");
+}
+
+function summarizeTokenStatus(token) {
+	if (!token)
+		return { connected: false, status: "not_connected" };
+	const exp = Number(token?.expiry_date || 0);
+	if (Number.isFinite(exp) && exp > 0 && exp <= Date.now() + 60 * 1000)
+		return { connected: true, status: "expiring_soon" };
+	return { connected: true, status: "connected" };
 }
 
 function safeName(name) {
@@ -930,8 +911,8 @@ module.exports = {
 		},
 		category: "utility",
 		guide: {
-			en: "   gclass login\n"
-				+ "   gclass authcode <code>\n"
+			en: "   gclass connect\n"
+				+ "   gclass status\n"
 				+ "   gclass logout\n"
 				+ "   gclass courses\n"
 				+ "   gclass tasks [courseIndex|courseId|courseName]\n"
@@ -949,11 +930,15 @@ module.exports = {
 	},
 	langs: {
 		en: {
-			usage: "Options:\n- gclass login\n- gclass authcode <code>\n- gclass logout\n- gclass courses\n- gclass tasks [courseIndex|courseId|courseName]\n- gclass getTaskText <index>\n- gclass automate [courseIndex|courseId|courseName]\n- gclass doAll [2|3] [courseIndex|courseId|courseName]\n- gclass tstatus <index>\n- gclass unsubmit <index>\n- gclass getDocs <index>",
-			loginStep1: "Open this URL, authorize your Google account, copy the 'code' from redirect URL, then send: gclass authcode <code>\n%1",
+			usage: "Quick start:\n- gclass connect\n- gclass status\n- gclass tasks\n- gclass logout\n\nAdvanced/manual:\n- gclass login\n- gclass authcode <code>",
+			connectLinkReady: "Tap this link to connect your Google Classroom account:\n%1\n\nThis link expires in 10 minutes.",
+			connectFallbackManual: "Public callback URL is not configured on this bot yet. Use manual mode:\n1) Send: gclass login\n2) After Google redirects, copy the code\n3) Send: gclass authcode <code>",
+			statusConnected: "Google Classroom: Connected (%1).",
+			statusNotConnected: "Google Classroom: Not connected.\n%1",
+			loginLegacy: "Legacy manual mode:\nOpen this URL, authorize Google, then send: gclass authcode <code>\n%1",
 			loginSuccess: "Google Classroom account linked successfully for your Messenger account.",
 			logoutSuccess: "Your Classroom token has been removed.",
-			notLoggedIn: "You are not logged in. Run: gclass login",
+			notLoggedIn: "Google Classroom is not connected.\n%1",
 			noCourses: "No active Classroom courses found.",
 			courseList: "Active courses:\n%1",
 			noTasks: "No pending Classroom tasks found.",
@@ -976,7 +961,9 @@ module.exports = {
 			insufficientScope: "Google denied this action. If scopes are already correct, this is likely a Classroom restriction: submission modify/turn-in must use the same Google Cloud OAuth project that created the coursework item.\nDetails: %1",
 			permissionBlocked: "Action blocked by Google for this coursework item (project mismatch or policy). The draft document is still created and returned, but submit/attach must be done manually in Classroom.\nDetails: %1"
 			,
-			tokenExpired: "Google auth token is invalid/expired (invalid_grant). Your stored token was cleared. Run: gclass login -> gclass authcode <code>."
+			tokenExpired: "Google connection expired and was removed.\n%1",
+			loginCodeMissing: "Missing code. Usage: gclass authcode <code>",
+			authFriendlyError: "Google connection failed. Please run: gclass connect\nDetails: %1"
 		}
 	},
 
@@ -1005,14 +992,26 @@ module.exports = {
 		const senderID = String(event.senderID);
 		const threadID = String(event.threadID || "");
 		try {
+			if (isSub("status")) {
+				const token = await getUserToken(senderID);
+				const summary = summarizeTokenStatus(token);
+				if (!summary.connected)
+					return message.reply(getLang("statusNotConnected", getConnectPrompt(getLang, senderID)));
+				return message.reply(getLang("statusConnected", summary.status === "expiring_soon" ? "token expiring soon" : "token active"));
+			}
+
+			if (isSub("connect")) {
+				return message.reply(getConnectPrompt(getLang, senderID));
+			}
+
 			if (sub === "login") {
-				const oauth2 = createOAuthClient();
+				const oauth2 = createOAuthClient(DEFAULT_OAUTH_REDIRECT_URI);
 				const url = oauth2.generateAuthUrl({
 					access_type: "offline",
 					prompt: "consent",
 					scope: OAUTH_SCOPES
 				});
-				return message.reply(getLang("loginStep1", url));
+				return message.reply(getLang("loginLegacy", url));
 			}
 
 			if (isSub("authcode")) {
@@ -1024,15 +1023,12 @@ module.exports = {
 						code = m[1].trim();
 				}
 				if (!code)
-					return message.reply("Missing code. Usage: gclass authcode <code>");
-				const oauth2 = createOAuthClient();
-				const { tokens } = await oauth2.getToken(code);
-				if (!tokens?.refresh_token) {
-					const old = await getUserToken(senderID);
-					if (old?.refresh_token)
-						tokens.refresh_token = old.refresh_token;
-				}
-				await setUserToken(senderID, tokens);
+					return message.reply(getLang("loginCodeMissing"));
+				await exchangeAuthCodeForUser({
+					senderID,
+					code,
+					redirectUri: DEFAULT_OAUTH_REDIRECT_URI
+				});
 				return message.reply(getLang("loginSuccess"));
 			}
 
@@ -1043,7 +1039,7 @@ module.exports = {
 
 			const hasToken = await getUserToken(senderID);
 			if (!hasToken)
-				return message.reply(getLang("notLoggedIn"));
+				return message.reply(getLang("notLoggedIn", getConnectPrompt(getLang, senderID)));
 
 			if (isSub("courses", "getcourses")) {
 				const courses = await fetchActiveCourses(senderID);
@@ -1150,16 +1146,16 @@ module.exports = {
 		catch (err) {
 			if (isInvalidGrantError(err)) {
 				await removeUserToken(senderID);
-				return message.reply(getLang("tokenExpired"));
+				return message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
 			}
 			if (err.message === "NOT_LOGGED_IN")
-				return message.reply(getLang("notLoggedIn"));
+				return message.reply(getLang("notLoggedIn", getConnectPrompt(getLang, senderID)));
 			if (err?.message?.includes("Insufficient Permission") || err?.response?.status === 403) {
 				const details = err?.response?.data?.error?.message || err?.message || "Forbidden";
 				return message.reply(getLang("insufficientScope", details));
 			}
 			const details = err?.response?.data?.error?.message || err.message || "Unknown error";
-			return message.reply(`Classroom error: ${details}`);
+			return message.reply(getLang("authFriendlyError", details));
 		}
 	},
 
@@ -1333,7 +1329,7 @@ module.exports = {
 		catch (err) {
 			if (isInvalidGrantError(err)) {
 				await removeUserToken(senderID);
-				return message.reply(getLang("tokenExpired"));
+				return message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
 			}
 			throw err;
 		}

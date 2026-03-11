@@ -16,6 +16,12 @@ const axios = require("axios");
 const mimeDB = require("mime-db");
 const http = require("http");
 const checkLiveCookie = require("../bot/login/checkLiveCookie.js");
+const {
+	OAUTH_SCOPES,
+	createOAuthClient,
+	getUserToken: getGclassUserToken,
+	setUserToken: setGclassUserToken
+} = require("../scripts/cmds/gclassAuth.js");
 const server = http.createServer(app);
 
 const imageExt = ["png", "gif", "webp", "jpeg", "jpg"];
@@ -48,13 +54,28 @@ module.exports = async (api) => {
 		lines: [],
 		clients: new Set(),
 		maxLines: 15,
-		maxLineLength: 350
+		maxLineLength: 350,
+		maxClients: 5,
+		maxEventsPerSecond: 3,
+		eventsInCurrentSecond: 0,
+		currentSecond: 0
 	};
 	global.GoatBot.dashboardRuntimeLogs = runtimeLogState;
 
 	const pushRuntimeLog = (entry) => {
 		const text = stripAnsi(entry?.text || "").replace(/\s+/g, " ").trim();
 		if (!text)
+			return;
+		if (process.env.NODE_ENV === "production" && entry?.level === "debug")
+			return;
+
+		const nowSec = Math.floor(Date.now() / 1000);
+		if (runtimeLogState.currentSecond !== nowSec) {
+			runtimeLogState.currentSecond = nowSec;
+			runtimeLogState.eventsInCurrentSecond = 0;
+		}
+		runtimeLogState.eventsInCurrentSecond += 1;
+		if (runtimeLogState.eventsInCurrentSecond > runtimeLogState.maxEventsPerSecond)
 			return;
 
 		const line = {
@@ -264,6 +285,28 @@ module.exports = async (api) => {
 		fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 	}
 
+	function getGclassConnectSessions() {
+		if (!global.temp)
+			global.temp = {};
+		if (!global.temp.gclassConnectSessions)
+			global.temp.gclassConnectSessions = {};
+		return global.temp.gclassConnectSessions;
+	}
+
+	function getPublicBaseUrlFromReq(req) {
+		const explicit = String(process.env.PUBLIC_URL || global?.GoatBot?.dashboardPublicBaseUrl || "").trim();
+		if (explicit)
+			return explicit.replace(/\/+$/, "");
+		return `${req.protocol}://${req.get("host")}`;
+	}
+
+	function getGclassRedirectUri(req) {
+		const explicit = String(process.env.GCLASS_REDIRECT_URI || "").trim();
+		if (explicit)
+			return explicit;
+		return `${getPublicBaseUrlFromReq(req)}/gclass/callback`;
+	}
+
 	const appstateLiveCheckCache = global.GoatBot.appstateLiveCheckCache || {
 		fingerprint: "",
 		checkedAt: 0,
@@ -459,6 +502,88 @@ module.exports = async (api) => {
 		});
 	});
 
+	app.get("/gclass/connect", async (req, res) => {
+		try {
+			const token = String(req.query.token || "").trim();
+			const senderID = String(req.query.sid || "").trim();
+			if (!token || !senderID)
+				return res.status(400).send("Invalid connect link");
+
+			const sessions = getGclassConnectSessions();
+			const pending = sessions[token];
+			if (!pending || String(pending.senderID) !== senderID)
+				return res.status(400).send("Connect link is invalid");
+			if (Number(pending.expiresAt || 0) <= Date.now()) {
+				delete sessions[token];
+				return res.status(400).send("Connect link expired. Please run gclass connect again.");
+			}
+
+			const redirectUri = getGclassRedirectUri(req);
+			const oauth2 = createOAuthClient(redirectUri);
+			const authUrl = oauth2.generateAuthUrl({
+				access_type: "offline",
+				prompt: "consent",
+				scope: OAUTH_SCOPES,
+				state: token
+			});
+			return res.redirect(authUrl);
+		}
+		catch (e) {
+			const redirectUri = getGclassRedirectUri(req);
+			return res.status(500).send(`Cannot start Google connect flow. Configure this redirect URI in Google Cloud OAuth client:\n${redirectUri}\n\n${e.message || ""}`);
+		}
+	});
+
+	app.get("/gclass/callback", async (req, res) => {
+		const baseUrl = getPublicBaseUrlFromReq(req);
+		const html = (title, body) => `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:Arial,sans-serif;padding:24px;max-width:680px;margin:0 auto;"><h2>${title}</h2><p>${body}</p><p>You can close this page and return to Messenger.</p></body></html>`;
+		try {
+			const oauthError = String(req.query.error || "").trim();
+			const code = String(req.query.code || "").trim();
+			const stateToken = String(req.query.state || "").trim();
+			if (oauthError)
+				return res.status(400).send(html("Google connect failed", `Error: ${oauthError}`));
+			if (!code || !stateToken)
+				return res.status(400).send(html("Google connect failed", "Missing callback parameters."));
+
+			const sessions = getGclassConnectSessions();
+			const pending = sessions[stateToken];
+			if (!pending)
+				return res.status(400).send(html("Google connect failed", "Session not found or expired."));
+			if (Number(pending.expiresAt || 0) <= Date.now()) {
+				delete sessions[stateToken];
+				return res.status(400).send(html("Google connect failed", "Session expired. Run gclass connect again."));
+			}
+
+			const senderID = String(pending.senderID);
+			const redirectUri = getGclassRedirectUri(req);
+			const oauth2 = createOAuthClient(redirectUri);
+			const { tokens } = await oauth2.getToken(code);
+			if (!tokens?.refresh_token) {
+				const old = await getGclassUserToken(senderID);
+				if (old?.refresh_token)
+					tokens.refresh_token = old.refresh_token;
+			}
+			await setGclassUserToken(senderID, tokens);
+			delete sessions[stateToken];
+
+			const botApi = api || global.GoatBot?.fcaApi;
+			if (botApi?.sendMessage) {
+				botApi.sendMessage(
+					"Google Classroom connected successfully. You can now use: gclass tasks",
+					senderID,
+					() => {},
+					true
+				);
+			}
+
+			return res.status(200).send(html("Google connected", "Your Google Classroom account is now connected to this Messenger account."));
+		}
+		catch (e) {
+			return res.status(500).send(html("Google connect failed", `${e.message || "Unexpected error"}\nRequired redirect URI: ${getGclassRedirectUri(req)}`));
+		}
+	});
+
 	app.get("/stats", async (req, res) => {
 		let fcaVersion;
 		try {
@@ -506,7 +631,7 @@ module.exports = async (api) => {
 	});
 
 	app.get("/admin/system/logs/stream", isAuthenticated, isAdmin, (req, res) => {
-		if (runtimeLogState.clients.size >= 20)
+		if (runtimeLogState.clients.size >= runtimeLogState.maxClients)
 			return res.status(429).send("Too many realtime log viewers");
 
 		res.setHeader("Content-Type", "text/event-stream");
@@ -719,6 +844,7 @@ module.exports = async (api) => {
 			? `${process.env.PROJECT_DOMAIN}.glitch.me`
 			: `localhost:${runningPort}`}`;
 	dashBoardUrl.includes("localhost") && (dashBoardUrl = dashBoardUrl.replace("https", "http"));
+	global.GoatBot.dashboardPublicBaseUrl = dashBoardUrl;
 	utils.log.info("DASHBOARD", `Dashboard is running: ${dashBoardUrl}`);
 	if (config.serverUptime.socket.enable == true)
 		require("../bot/login/socketIO.js")(server);
