@@ -1,19 +1,13 @@
 const expres = require("express");
 const router = expres.Router();
 
-module.exports = function ({ unAuthenticated, isVerifyRecaptcha, Passport }) {
+module.exports = function ({ unAuthenticated, Passport }) {
 	router
 		.get("/", unAuthenticated, (req, res) => {
 			req.session.redirectTo = req.query.redirect || "/";
 			res.render("login");
 		})
 		.post("/", unAuthenticated, async (req, res, next) => {
-			if (!await isVerifyRecaptcha(req.body["g-recaptcha-response"]))
-				return res.status(400).send({
-					status: "error",
-					errors: [{ msg: "Captcha không hợp lệ" }]
-				});
-
 			Passport.authenticate("local", function (err, user, info) {
 				if (err)
 					return next(err);

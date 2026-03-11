@@ -1,114 +1,374 @@
-    // Make sure to include this import
-    const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 
-    const apiKey = "AIzaSyC9nZPUpiHHGz5kfhYEvPBa1UYCMKw5tt4";
-    // Initialize the GoogleGenerativeAI instance with your API key
-    const genAI = new GoogleGenerativeAI(apiKey);
+const axios = require("axios");
 
-    // Model configuration
-    const maxTokens = 500;
-    const maxStorageMessage = 4;
+const maxStorageMessage = 4;
+const geminiApiBase = "https://generativelanguage.googleapis.com/v1beta";
 
-    if (!global.temp.geminiUsing)
-        global.temp.geminiUsing = {};
-    if (!global.temp.geminiHistory)
-        global.temp.geminiHistory = {};
+if (!global.temp)
+	global.temp = {};
+if (!global.temp.geminiUsing)
+	global.temp.geminiUsing = {};
+if (!global.temp.geminiHistory)
+	global.temp.geminiHistory = {};
+if (!global.temp.geminiModelCache)
+	global.temp.geminiModelCache = {};
+if (!global.temp.vanceSentMessages)
+	global.temp.vanceSentMessages = {};
 
-    const { geminiUsing, geminiHistory } = global.temp;
+const { geminiUsing, geminiHistory, geminiModelCache } = global.temp;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    module.exports = {
-        config: {
-            name: "vance",
-            version: "1.0",
-            author: "VincePradas",
-            countDown: 5,
-            role: 0,
-            description: {
-                vi: "Gemini chat",
-                en: "Gemini chat"
-            },
-            category: "box chat",
-            guide: {
-                vi: "   {pn} <nội dung> - chat với Gemini",
-                en: "   {pn} <content> - chat with Gemini"
-            }
-        },
+function normalizeModelName(modelName) {
+	return String(modelName || "").replace(/^models\//, "").trim();
+}
 
-        langs: {
-            vi: {
-                apiKeyEmpty: "Vui lòng cung cấp API key cho Gemini tại file scripts/cmds/gemini.js",
-                yourAreUsing: "Bạn đang sử dụng Gemini chat, vui lòng chờ quay lại sau khi yêu cầu trước kết thúc",
-                processingRequest: "Đang xử lý yêu cầu của bạn, quá trình này có thể mất vài phút, vui lòng chờ",
-                invalidContent: "Vui lòng nhập nội dung bạn muốn chat",
-                error: "Đã có lỗi xảy ra\n%1",
-                clearHistory: "Đã xóa lịch sử chat của bạn với Gemini"
-            },
-            en: {
-                apiKeyEmpty: "Please provide API key for Gemini at file scripts/cmds/gemini.js",
-                yourAreUsing: "You are using Gemini chat, please wait until the previous request ends",
-                processingRequest: "Processing your request, this process may take a few minutes, please wait",
-                invalidContent: "Please enter the content you want to chat",
-                error: "An error has occurred\n%1",
-                clearHistory: "Your chat history with Gemini has been deleted"
-            }
-        },
+function sanitizeOutput(text) {
+	if (!text)
+		return text;
 
-        onStart: async function ({ message, event, args, getLang, commandName }) {
-            if (!apiKey)
-                return message.reply(getLang('apiKeyEmpty'));
+	return String(text)
+		// remove explicit id fields
+		.replace(/\(\s*id\s*:\s*[^)]+\)/gi, "")
+		.replace(/\b(?:userID|threadID|id)\s*:\s*\d+\b/gi, "")
+		// remove markdown asterisks
+		.replace(/\*\*/g, "")
+		.replace(/\*/g, "")
+		// clean spacing artifacts
+		.replace(/[ \t]{2,}/g, " ")
+		.replace(/[ \t]+\n/g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
 
-            if (!args[0])
-                return message.reply(getLang('invalidContent'));
+async function resolveModel(apiKey, preferredModel) {
+	const preferred = normalizeModelName(preferredModel) || "gemini-1.5-flash";
+	const cacheKey = `${apiKey}:${preferred}`;
+	if (geminiModelCache[cacheKey])
+		return geminiModelCache[cacheKey];
 
-            if (geminiUsing[event.senderID])
-                return message.reply(getLang("yourAreUsing"));
+	try {
+		const { data } = await axios.get(`${geminiApiBase}/models?key=${encodeURIComponent(apiKey)}`, {
+			timeout: 15000
+		});
+		const models = Array.isArray(data?.models) ? data.models : [];
+		const available = models.map(m => normalizeModelName(m?.name)).filter(Boolean);
 
-            geminiUsing[event.senderID] = true;
+		if (available.includes(preferred)) {
+			geminiModelCache[cacheKey] = preferred;
+			return preferred;
+		}
 
-            let sending;
-            try {
-                sending = message.reply(getLang('processingRequest'));
+		for (const candidate of ["gemini-1.5-flash", "gemini-1.5-pro"]) {
+			if (available.includes(candidate)) {
+				geminiModelCache[cacheKey] = candidate;
+				return candidate;
+			}
+		}
 
-                // Create the prompt from user input
-                const prompt = args.join(' ');
+		const firstGenerateCapable = models.find(m =>
+			Array.isArray(m?.supportedGenerationMethods)
+			&& m.supportedGenerationMethods.includes("generateContent")
+		);
+		if (firstGenerateCapable?.name) {
+			const fallback = normalizeModelName(firstGenerateCapable.name);
+			geminiModelCache[cacheKey] = fallback;
+			return fallback;
+		}
+	}
+	catch (_e) {}
 
-                // Get the model
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+	geminiModelCache[cacheKey] = preferred;
+	return preferred;
+}
 
-                // Generate content
-                const result = await model.generateContent(prompt);
+async function buildThreadContext(event, threadsData) {
+	if (!event?.threadID || !threadsData)
+		return "";
 
-                // Get the generated text
-                const text = result.response.text();
+	try {
+		const threadData = await threadsData.get(event.threadID);
+		const members = Array.isArray(threadData?.members) ? threadData.members : [];
+		const topMembers = members.slice(0, 50).map((m, idx) => {
+			const name = m?.name || "Unknown";
+			const userID = m?.userID || "unknown";
+			const nickname = m?.nickname ? `, nickname: ${m.nickname}` : "";
+			return `${idx + 1}. ${name} (id: ${userID}${nickname})`;
+		});
 
-                // Store conversation history
-                if (!geminiHistory[event.senderID] || !Array.isArray(geminiHistory[event.senderID]))
-                    geminiHistory[event.senderID] = [];
+		const mentions = event?.mentions && typeof event.mentions === "object"
+			? Object.entries(event.mentions).map(([id, name]) => `${name.replace(/^@/, "")} (id: ${id})`)
+			: [];
 
-                if (geminiHistory[event.senderID].length >= maxStorageMessage)
-                    geminiHistory[event.senderID].shift();
+		let context = `Group thread id: ${event.threadID}\n`;
+		if (topMembers.length)
+			context += `Known participants (up to 50):\n${topMembers.join("\n")}\n`;
+		if (mentions.length)
+			context += `Mentioned in this message: ${mentions.join(", ")}\n`;
 
-                geminiHistory[event.senderID].push({
-                    role: 'user',
-                    content: prompt
-                });
+		return context.trim();
+	}
+	catch (_e) {
+		return "";
+	}
+}
 
-                geminiHistory[event.senderID].push({
-                    role: 'assistant',
-                    content: text
-                });
+async function buildUserInfoContext(event, api) {
+	if (!api || !event)
+		return "";
 
-                // Reply with the generated content
-                return message.reply(text);
-            }
-            catch (err) {
-                const errorMessage = err.message || "An unknown error occurred";
-                return message.reply(getLang('error', errorMessage));
-            }
-            finally {
-                delete geminiUsing[event.senderID];
-                message.unsend((await sending).messageID);
-            }
-        }
-    };
+	const ids = new Set();
+	if (event.senderID)
+		ids.add(String(event.senderID));
+	if (event.mentions && typeof event.mentions === "object")
+		for (const id of Object.keys(event.mentions))
+			ids.add(String(id));
+
+	if (!ids.size)
+		return "";
+
+	const lines = [];
+	for (const uid of ids) {
+		try {
+			const result = await api.getUserInfo(uid);
+			const info = result?.[uid] || {};
+			const name = info?.name || "Unknown";
+			const vanity = info?.vanity ? `, vanity: ${info.vanity}` : "";
+			const gender = typeof info?.gender !== "undefined" ? `, gender: ${info.gender}` : "";
+			const type = info?.type ? `, type: ${info.type}` : "";
+			const isFriend = typeof info?.isFriend !== "undefined" ? `, isFriend: ${info.isFriend}` : "";
+			lines.push(`- ${name} (id: ${uid}${vanity}${gender}${type}${isFriend})`);
+		}
+		catch (_e) {
+			lines.push(`- id: ${uid} (public profile info unavailable)`);
+		}
+	}
+
+	if (!lines.length)
+		return "";
+	return `User profile info (from Facebook API, fields may be partial):\n${lines.join("\n")}`;
+}
+
+async function generateVanceText({ prompt, event, senderID, commandName, envCommands, threadsData, api, getLang }) {
+	const apiKey = envCommands?.[commandName]?.apiKey || process.env.GEMINI_API_KEY || "";
+	const preferredModel = envCommands?.[commandName]?.model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+	if (!apiKey)
+		throw new Error(getLang("apiKeyEmpty"));
+	if (!prompt || !String(prompt).trim())
+		throw new Error(getLang("invalidContent"));
+	if (geminiUsing[senderID])
+		throw new Error(getLang("yourAreUsing"));
+
+	geminiUsing[senderID] = true;
+	try {
+		const normalizedPrompt = String(prompt).trim();
+		const history = Array.isArray(geminiHistory[senderID]) ? geminiHistory[senderID] : [];
+		const threadContext = await buildThreadContext(event, threadsData);
+		const userInfoContext = await buildUserInfoContext(event, api);
+
+		const contextChunks = [threadContext, userInfoContext].filter(Boolean);
+		const finalPrompt = contextChunks.length
+			? `You are Vance, a general AI assistant in Messenger.\nAnswer any normal question directly.\nWhen the user asks about people/groups, use the context below.\nIf specific profile/group data is missing, say it's unavailable, but still answer the rest of the request.\n\nContext:\n${contextChunks.join("\n\n")}\n\nUser request: ${normalizedPrompt}`
+			: `You are Vance, a helpful general AI assistant in Messenger.\nUser request: ${normalizedPrompt}`;
+
+		const contents = [];
+		for (const item of history) {
+			if (!item?.role || !item?.content)
+				continue;
+			contents.push({
+				role: item.role === "assistant" ? "model" : "user",
+				parts: [{ text: String(item.content) }]
+			});
+		}
+		contents.push({
+			role: "user",
+			parts: [{ text: finalPrompt }]
+		});
+
+		const model = await resolveModel(apiKey, preferredModel);
+		const url = `${geminiApiBase}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+		const response = await axios.post(url, {
+			contents,
+			generationConfig: { maxOutputTokens: 500 }
+		}, {
+			timeout: 60000
+		});
+
+		const parts = response?.data?.candidates?.[0]?.content?.parts || [];
+		const rawText = parts.map(p => p?.text || "").join("").trim();
+		const text = sanitizeOutput(rawText);
+		if (!text)
+			throw new Error("Empty response from Gemini API");
+
+		if (!Array.isArray(geminiHistory[senderID]))
+			geminiHistory[senderID] = [];
+
+		geminiHistory[senderID].push(
+			{ role: "user", content: normalizedPrompt },
+			{ role: "assistant", content: text }
+		);
+
+		while (geminiHistory[senderID].length > maxStorageMessage * 2)
+			geminiHistory[senderID].shift();
+
+		return text;
+	}
+	finally {
+		delete geminiUsing[senderID];
+	}
+}
+
+async function replyAndRegister({ message, text, event, commandName }) {
+	const sent = await message.reply(text);
+	if (sent?.messageID) {
+		const threadID = String(event.threadID || "");
+		if (!global.temp.vanceSentMessages[threadID])
+			global.temp.vanceSentMessages[threadID] = [];
+		global.temp.vanceSentMessages[threadID].push({
+			id: sent.messageID,
+			ts: Date.now()
+		});
+		if (global.temp.vanceSentMessages[threadID].length > 300)
+			global.temp.vanceSentMessages[threadID] = global.temp.vanceSentMessages[threadID].slice(-300);
+
+		global.GoatBot.onReply.set(sent.messageID, {
+			commandName,
+			messageID: sent.messageID,
+			author: event.senderID,
+			type: "continueVance"
+		});
+	}
+	return sent;
+}
+
+async function clearVanceMessages({ api, threadID, maxCount }) {
+	const key = String(threadID || "");
+	const allRaw = global.temp.vanceSentMessages[key] || [];
+	const all = allRaw.map(item => typeof item === "string" ? { id: item, ts: 0 } : item).filter(item => item?.id);
+	if (!all.length)
+		return 0;
+
+	const now = Date.now();
+	const dayScoped = all.filter(item => item.ts && now - item.ts <= ONE_DAY_MS);
+	if (!dayScoped.length)
+		return 0;
+
+	const take = Math.max(1, Math.min(300, parseInt(maxCount, 10) || dayScoped.length));
+	const targets = dayScoped.slice(-take);
+	let removed = 0;
+	for (let i = targets.length - 1; i >= 0; i--) {
+		try {
+			await api.unsendMessage(targets[i].id);
+			removed++;
+		}
+		catch (_e) {}
+	}
+	const targetIds = new Set(targets.map(t => t.id));
+	global.temp.vanceSentMessages[key] = all.filter(item => !targetIds.has(item.id));
+	return removed;
+}
+
+module.exports = {
+	config: {
+		name: "vance",
+		version: "1.3",
+		author: "VincePradas",
+		countDown: 5,
+		role: 0,
+		description: {
+			vi: "Gemini chat",
+			en: "Gemini chat"
+		},
+		category: "box chat",
+		guide: {
+			vi: "   {pn} <noi dung> - chat voi Gemini",
+			en: "   {pn} <content> - chat with Gemini"
+		},
+		envConfig: {
+			apiKey: "",
+			model: "gemini-1.5-flash"
+		}
+	},
+
+	langs: {
+		vi: {
+			apiKeyEmpty: "Vui long them Gemini API key trong configCommands.json -> envCommands -> vance -> apiKey",
+			yourAreUsing: "Ban dang su dung Gemini chat, vui long doi yeu cau truoc ket thuc",
+			invalidContent: "Vui long nhap noi dung ban muon chat",
+			cleared: "Da xoa %1 tin nhan cua Vance trong doan chat nay",
+			noMessagesToClear: "Khong co tin nhan Vance nao trong 24 gio gan day de xoa",
+			adminOnlyClear: "Chi admin bot moi co the xoa tin nhan cua Vance",
+			replyOwnerOnly: "Chi nguoi bat dau hoi dap moi co the tiep tuc bang reply",
+			error: "Da co loi xay ra\n%1"
+		},
+		en: {
+			apiKeyEmpty: "Please set Gemini API key in configCommands.json -> envCommands -> vance -> apiKey",
+			yourAreUsing: "Pending request for vance, please wait until the previous request ends",
+			invalidContent: "Please enter the content you want to chat",
+			cleared: "Removed %1 Vance message(s) in this thread",
+			noMessagesToClear: "No Vance messages from the last 24 hours to remove in this thread",
+			adminOnlyClear: "Only bot admins can clear Vance messages",
+			replyOwnerOnly: "Only the original requester can continue this vance thread by reply",
+			error: "An error has occurred\n%1"
+		}
+	},
+
+	onStart: async function ({ message, event, args, getLang, envCommands, commandName, threadsData, api, role }) {
+		const first = (args[0] || "").toLowerCase();
+		if (first === "clear" || first === "cleanup") {
+			if (role < 2)
+				return message.reply(getLang("adminOnlyClear"));
+			const countArg = args[1];
+			const removed = await clearVanceMessages({
+				api,
+				threadID: event.threadID,
+				maxCount: countArg
+			});
+			return message.reply(removed ? getLang("cleared", removed) : getLang("noMessagesToClear"));
+		}
+
+		try {
+			const text = await generateVanceText({
+				prompt: args.join(" "),
+				event,
+				senderID: event.senderID,
+				commandName,
+				envCommands,
+				threadsData,
+				api,
+				getLang
+			});
+			return await replyAndRegister({ message, text, event, commandName });
+		}
+		catch (err) {
+			const details = err?.response?.data?.error?.message || err.message || "Unknown error";
+			return message.reply(getLang("error", details));
+		}
+	},
+
+	onReply: async function ({ event, Reply, message, getLang, envCommands, commandName, threadsData, api }) {
+		if (Reply.type !== "continueVance")
+			return;
+		if (event.senderID !== Reply.author)
+			return message.reply(getLang("replyOwnerOnly"));
+
+		try {
+			const text = await generateVanceText({
+				prompt: event.body || "",
+				event,
+				senderID: event.senderID,
+				commandName,
+				envCommands,
+				threadsData,
+				api,
+				getLang
+			});
+			return await replyAndRegister({ message, text, event, commandName });
+		}
+		catch (err) {
+			const details = err?.response?.data?.error?.message || err.message || "Unknown error";
+			return message.reply(getLang("error", details));
+		}
+	}
+};

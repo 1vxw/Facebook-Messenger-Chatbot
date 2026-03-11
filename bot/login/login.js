@@ -1,5 +1,5 @@
 // set bash title
-process.stdout.write("\x1b]2;Goat Bot V2 - Made by NTKhang\x1b\x5c");
+process.stdout.write("\x1b]2;VXW Bot - Made by Vince Pradas\x1b\x5c");
 const defaultRequire = require;
 
 function decode(text) {
@@ -15,7 +15,7 @@ const path = defaultRequire("path");
 const readline = defaultRequire("readline");
 const fs = defaultRequire("fs-extra");
 const toptp = defaultRequire("totp-generator");
-const login = defaultRequire(`${process.cwd()}/fb-chat-api`);
+const login = defaultRequire("fb-chat-api");
 const qr = new (defaultRequire("qrcode-reader"));
 const Canvas = defaultRequire("canvas");
 const https = defaultRequire("https");
@@ -65,22 +65,24 @@ function centerText(text, length) {
 // logo
 const titles = [
 	[
-		"██████╗  ██████╗  █████╗ ████████╗    ██╗   ██╗██████╗",
-		"██╔════╝ ██╔═══██╗██╔══██╗╚══██╔══╝    ██║   ██║╚════██╗",
-		"██║  ███╗██║   ██║███████║   ██║       ██║   ██║ █████╔╝",
-		"██║   ██║██║   ██║██╔══██║   ██║       ╚██╗ ██╔╝██╔═══╝",
-		"╚██████╔╝╚██████╔╝██║  ██║   ██║        ╚████╔╝ ███████╗",
-		"╚═════╝  ╚═════╝ ╚═╝  ╚═╝   ╚═╝         ╚═══╝  ╚══════╝"
+		"██╗   ██╗██╗  ██╗██╗    ██╗",
+		"██║   ██║╚██╗██╔╝██║    ██║",
+		"██║   ██║ ╚███╔╝ ██║ █╗ ██║",
+		"╚██╗ ██╔╝ ██╔██╗ ██║███╗██║",
+		 "╚████╔╝ ██╔╝ ██╗╚███╔███╔╝",
+	 	  "╚═══╝  ╚═╝  ╚═╝ ╚══╝╚══╝"             
 	],
 	[
-		"█▀▀ █▀█ ▄▀█ ▀█▀  █▄▄ █▀█ ▀█▀  █░█ ▀█",
-		"█▄█ █▄█ █▀█ ░█░  █▄█ █▄█ ░█░  ▀▄▀ █▄"
+		 "_ _ _ _ _ _ _   | |_ ___| |_    _ _|_  |",
+		"| | |_'_| | | |  | . | . |  _|  | | |  _|",
+		 "\_/|_,_|_____|  |___|___|_|     \_/|___|"
+                                         
 	],
 	[
-		"G O A T B O T  V 2 @" + currentVersion
+		"V X W  V 1 @" + currentVersion
 	],
 	[
-		"GOATBOT V2"
+		"VXW V1"
 	]
 ];
 const maxWidth = process.stdout.columns;
@@ -98,7 +100,7 @@ for (const text of title) {
 	const textColor = gradient("#FA8BFF", "#2BD2FF", "#2BFF88")(text);
 	centerText(textColor, text.length);
 }
-let subTitle = `GoatBot V2@${currentVersion}- A simple Bot chat messenger use personal account`;
+let subTitle = `VXW Bot@${currentVersion} - A Messenger assistant for personal accounts`;
 const subTitleArray = [];
 if (subTitle.length > maxWidth) {
 	while (subTitle.length > maxWidth) {
@@ -112,8 +114,8 @@ if (subTitle.length > maxWidth) {
 else {
 	subTitleArray.push(subTitle);
 }
-const author = ("Created by NTKhang with ♡");
-const srcUrl = ("Source code: https://github.com/ntkhang03/Goat-Bot-V2");
+const author = ("Created by Vince Pradas");
+const srcUrl = ("Source code: https://github.com/1vxw");
 const fakeRelease = ("ALL VERSIONS NOT RELEASED HERE ARE FAKE");
 for (const t of subTitleArray) {
 	const textColor2 = gradient("#9F98E8", "#AFF6CF")(t);
@@ -234,6 +236,41 @@ global.statusAccountBot = 'good';
 let changeFbStateByCode = false;
 let latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
 let dashBoardIsRunning = false;
+const dashboardFirstBoot = process.env.DASHBOARD_FIRST_BOOT === "1";
+let bootingBotFromTrigger = false;
+global.GoatBot.bootingBotFromTrigger = false;
+
+async function startDashboardServer(api = null) {
+	if (global.GoatBot.config.dashBoard?.enable !== true)
+		return false;
+	if (dashBoardIsRunning)
+		return true;
+	try {
+		await require("../../dashboard/app.js")(api);
+		log.info("DASHBOARD", getText('login', 'openDashboardSuccess'));
+		dashBoardIsRunning = true;
+		return true;
+	}
+	catch (err) {
+		log.err("DASHBOARD", getText('login', 'openDashboardError'), err);
+		return false;
+	}
+}
+
+async function triggerBotStart(loginWithEmail) {
+	if (bootingBotFromTrigger)
+		return false;
+	bootingBotFromTrigger = true;
+	global.GoatBot.bootingBotFromTrigger = true;
+	try {
+		await startBot(loginWithEmail);
+		return true;
+	}
+	finally {
+		bootingBotFromTrigger = false;
+		global.GoatBot.bootingBotFromTrigger = false;
+	}
+}
 
 
 async function getAppStateFromEmail(spin = { _start: () => { }, _stop: () => { } }, facebookAccount) {
@@ -699,13 +736,7 @@ async function startBot(loginWithEmail) {
 				}
 				// —————————— CHECK DASHBOARD —————————— //
 				if (global.GoatBot.config.dashBoard?.enable == true) {
-					try {
-						await require("../../dashboard/app.js")(null);
-						log.info("DASHBOARD", getText('login', 'openDashboardSuccess'));
-					}
-					catch (err) {
-						log.err("DASHBOARD", getText('login', 'openDashboardError'), err);
-					}
+					await startDashboardServer(null);
 					return;
 				}
 				else {
@@ -724,7 +755,7 @@ async function startBot(loginWithEmail) {
 			log.info("BOT ID", `${global.botID} - ${await getName(global.botID)}`);
 			log.info("PREFIX", global.GoatBot.config.prefix);
 			log.info("LANGUAGE", global.GoatBot.config.language);
-			log.info("BOT NICK NAME", global.GoatBot.config.nickNameBot || "GOAT BOT");
+			log.info("BOT NICK NAME", global.GoatBot.config.nickNameBot || "VXW");
 			// ———————————————————— GBAN ————————————————————— //
 			let dataGban;
 
@@ -863,14 +894,7 @@ async function startBot(loginWithEmail) {
 			// ——————————————————— DASHBOARD ——————————————————— //
 			if (global.GoatBot.config.dashBoard?.enable == true && dashBoardIsRunning == false) {
 				logColor('#f5ab00', createLine('DASHBOARD'));
-				try {
-					await require("../../dashboard/app.js")(api);
-					log.info("DASHBOARD", getText('login', 'openDashboardSuccess'));
-					dashBoardIsRunning = true;
-				}
-				catch (err) {
-					log.err("DASHBOARD", getText('login', 'openDashboardError'), err);
-				}
+				await startDashboardServer(api);
 			}
 			// ———————————————————— ADMIN BOT ———————————————————— //
 			logColor('#f5ab00', character);
@@ -892,8 +916,8 @@ async function startBot(loginWithEmail) {
 			log.master("LOAD TIME", `${convertTime(Date.now() - global.GoatBot.startTime)}`);
 			logColor("#f5ab00", createLine("COPYRIGHT"));
 			// —————————————————— COPYRIGHT INFO —————————————————— //
-			// console.log(`\x1b[1m\x1b[33mCOPYRIGHT:\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36mProject GoatBot v2 created by ntkhang03 (https://github.com/ntkhang03), please do not sell this source code or claim it as your own. Thank you!\x1b[0m`);
-			console.log(`\x1b[1m\x1b[33m${("COPYRIGHT:")}\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36m${("Project GoatBot v2 created by ntkhang03 (https://github.com/ntkhang03), please do not sell this source code or claim it as your own. Thank you!")}\x1b[0m`);
+			// console.log(`\x1b[1m\x1b[33mCOPYRIGHT:\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36mProject VXW v2 created by ntkhang03 (https://github.com/1vxw), please do not sell this source code or claim it as your own. Thank you!\x1b[0m`);
+			console.log(`\x1b[1m\x1b[33m${("COPYRIGHT:")}\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36m${("Project VXW created by Vince Pradas (https://github.com/1vxw). Please do not sell this source code or claim it as your own.")}\x1b[0m`);
 			logColor("#f5ab00", character);
 			global.GoatBot.config.adminBot = adminBot;
 			writeFileSync(global.client.dirConfig, JSON.stringify(global.GoatBot.config, null, 2));
@@ -1150,12 +1174,25 @@ async function startBot(loginWithEmail) {
 					// await stopListening();
 					latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
 					// process.exit(2);
-					startBot();
+					triggerBotStart();
 				}
 			});
 		}, 10000);
 	}
 }
 
-global.GoatBot.reLoginBot = startBot;
-startBot();
+global.GoatBot.reLoginBot = triggerBotStart;
+global.GoatBot.__loginBootstrapReady = true;
+
+if (dashboardFirstBoot && global.GoatBot.config.dashBoard?.enable === true) {
+	startDashboardServer(null).then((started) => {
+		if (started)
+			log.info("BOOT", "Dashboard-first mode enabled. Inject secrets in dashboard, then press Start Bot.");
+		else
+			triggerBotStart();
+	});
+}
+else {
+	triggerBotStart();
+}
+

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { findUid, getText } = global.utils;
 
-module.exports = function ({ isAuthenticated, randomNumberApikey, expireVerifyCode, isVerifyRecaptcha, dashBoardData, api, createLimiter, config }) {
+module.exports = function ({ isAuthenticated, randomNumberApikey, expireVerifyCode, dashBoardData, api, createLimiter, config, transporter }) {
 	router
 		.get("/", isAuthenticated, (req, res) => {
 			req.session.redirectTo = req.query.redirect;
@@ -17,20 +17,18 @@ module.exports = function ({ isAuthenticated, randomNumberApikey, expireVerifyCo
 		})
 
 		.post("/", isAuthenticated, async (req, res) => {
-			if (!await isVerifyRecaptcha(req.body["g-recaptcha-response"]))
-				return res.status(400).json({ errors: [{ msg: "Recaptcha is not correct" }] });
 			if (!api)
-				return res.status(400).send({ errors: [{ msg: "Hiện tại bot không hoạt động, vui lòng quay lại sau" }] });
+				return res.status(400).send({ errors: [{ msg: "The bot is currently offline. Please try again later." }] });
 			let { fbid } = req.body;
 			const code = randomNumberApikey(6);
 			if (!fbid)
-				return res.status(400).send({ errors: [{ msg: "Vui lòng nhập facebook id" }] });
+				return res.status(400).send({ errors: [{ msg: "Please enter a Facebook ID or profile URL" }] });
 			try {
 				if (isNaN(fbid))
 					fbid = await findUid(fbid);
 			}
 			catch (e) {
-				return res.status(400).send({ errors: [{ msg: "Facebook id hoặc url profile không tồn tại" }] });
+				return res.status(400).send({ errors: [{ msg: "Facebook ID or profile URL does not exist" }] });
 			}
 			req.session.waitVerify = {
 				fbid,
@@ -42,27 +40,39 @@ module.exports = function ({ isAuthenticated, randomNumberApikey, expireVerifyCo
 				delete req.session.waitVerify;
 			}, expireVerifyCode);
 
+			let sentVia = "facebook";
 			try {
 				await api.sendMessage(getText("verifyfbid", "sendCode", code, config.dashBoard.expireVerifyCode / 60000, global.GoatBot.config.language), fbid);
 			}
 			catch (e) {
-				const errors = [];
-				if (e.blockedAction)
-					errors.push({ msg: "Hiện tại bot bị chặn tính năng và không thể gửi tin nhắn, vui lòng thử lại sau" });
-				else
-					errors.push({ msg: `Không thể gửi mã xác nhận tới id facebook "${fbid}", bạn đã bật nhận tin nhắn chờ từ người lạ chưa?` });
+				try {
+					await transporter.sendMail({
+						from: "VXW",
+						to: req.user.email,
+						subject: "VXW Facebook ID verification code",
+						html: `<p>Your verification code is: <b>${code}</b></p><p>This code expires in ${Math.floor(config.dashBoard.expireVerifyCode / 60000)} minutes.</p>`
+					});
+					sentVia = "email";
+				}
+				catch (mailErr) {
+					const errors = [];
+					if (e.blockedAction)
+						errors.push({ msg: "The bot is temporarily blocked from sending messages, and email fallback also failed." });
+					else
+						errors.push({ msg: `Cannot send verification code to Facebook ID \"${fbid}\" and email fallback failed.` });
 
-				req.flash("errors", errors);
-				return res.status(400).send({
-					status: "error",
-					errors,
-					message: errors[0].msg
-				});
+					req.flash("errors", errors);
+					return res.status(400).send({
+						status: "error",
+						errors,
+						message: errors[0].msg
+					});
+				}
 			}
-			req.flash("success", { msg: "Mã xác nhận đã được gửi tới id facebook của bạn, nếu không thấy hãy kiểm tra tin nhăn chờ" });
+			req.flash("success", { msg: sentVia === "facebook" ? "Verification code sent to your Facebook account." : "Facebook delivery failed. Verification code sent to your dashboard email." });
 			res.send({
 				status: "success",
-				message: "Mã xác nhận đã được gửi tới id facebook của bạn, nếu không thấy hãy kiểm tra tin nhăn chờ"
+				message: sentVia === "facebook" ? "Verification code sent to your Facebook account." : "Facebook delivery failed. Verification code sent to your dashboard email."
 			});
 		})
 		.post("/submit-code", [isAuthenticated, function (req, res, next) {
@@ -77,15 +87,15 @@ module.exports = function ({ isAuthenticated, randomNumberApikey, expireVerifyCo
 				console.log(`User ${user.email} verify fbid ${fbid}`);
 				delete req.session.waitVerify;
 				await dashBoardData.set(user.email, { facebookUserID: fbid });
-				req.flash("success", { msg: "Đã xác nhận user id facebook thành công" });
+				req.flash("success", { msg: "Facebook ID verified successfully" });
 				res.send({
 					status: "success",
-					message: "Đã xác nhận user id facebook thành công",
+					message: "Facebook ID verified successfully",
 					redirectLink: req.session.redirectTo || "/dashboard"
 				});
 			}
 			else {
-				return res.status(400).send({ msg: "Mã xác nhận không đúng" });
+				return res.status(400).send({ msg: "Verification code is incorrect" });
 			}
 		});
 

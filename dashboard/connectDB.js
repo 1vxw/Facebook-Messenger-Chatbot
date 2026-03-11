@@ -3,19 +3,23 @@ const path = require("path");
 const dirConfig = path.join(`${__dirname}/../${process.env.NODE_ENV === 'development' ? 'config.dev.json' : 'config.json'}`);
 const dirConfigCommands = path.join(`${__dirname}/../${process.env.NODE_ENV === 'development' ? 'configCommands.dev.json' : 'configCommands.json'}`);
 
+const previousGoatBot = global.GoatBot || {};
 global.GoatBot = {
+	...previousGoatBot,
 	config: require(dirConfig),
-	configCommands: require(dirConfigCommands)
+	configCommands: require(dirConfigCommands),
+	reLoginBot: typeof previousGoatBot.reLoginBot === "function" ? previousGoatBot.reLoginBot : function () { },
+	__loginBootstrapReady: previousGoatBot.__loginBootstrapReady === true
 };
-global.utils = require("../utils.js");
-global.client = {
+global.utils = global.utils || require("../utils.js");
+global.client = global.client || {
 	database: {
 		creatingThreadData: [],
 		creatingUserData: [],
 		creatingDashBoardData: []
 	}
 };
-global.db = {
+global.db = global.db || {
 	allThreadData: [],
 	allUserData: [],
 	globalData: []

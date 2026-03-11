@@ -9,6 +9,7 @@
 	},
 	"dependencies": {
 		"@distube/ytdl-core": "^4.14.4",
+		"@dongdev/fca-unofficial": "^3.0.31",
 		"@google/generative-ai": "^0.21.0",
 		"axios": "^1.4.0",
 		"bcrypt": "^5.0.1",
@@ -18,12 +19,14 @@
 		"connect-flash": "^0.1.1",
 		"cookie-parser": "^1.4.6",
 		"crypto": "^1.0.1",
+		"docx": "^9.6.1",
 		"dotenv": "^16.4.5",
 		"eta": "^1.12.3",
 		"express": "^4.18.1",
 		"express-fileupload": "^1.4.0",
 		"express-rate-limit": "^6.5.2",
 		"express-session": "^1.17.3",
+		"fb-chat-api": "github:dongp06/fca-unofficial",
 		"form-data": "^4.0.0",
 		"fs-extra": "^11.1.0",
 		"googleapis": "^100.0.0",
@@ -41,6 +44,7 @@
 		"passport": "^0.6.0",
 		"passport-local": "^1.0.0",
 		"path": "^0.12.7",
+		"pdfkit": "^0.17.2",
 		"qrcode-reader": "^1.0.4",
 		"qs": "^6.11.0",
 		"request": "^2.88.2",
@@ -49,6 +53,7 @@
 		"sequelize": "^6.19.0",
 		"socket.io": "^4.5.1",
 		"sqlite3": "^5.0.5",
+		"stream": "^0.0.3",
 		"tinyurl": "^1.1.7",
 		"totp-generator": "^0.0.13",
 		"websocket-stream": "^5.5.2"
@@ -58,17 +63,17 @@
 		"dev": "set NODE_ENV=development&& node index.js",
 		"prod": "set NODE_ENV=production&& node index.js"
 	},
-	"author": "NTKhang",
+	"author": "Vince Pradas",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/ntkhang03/Goat-Bot-V2.git"
+		"url": "git+https://github.com/1vxw.git"
 	},
 	"keywords": [],
 	"bugs": {
-		"url": "https://github.com/ntkhang03/Goat-Bot-V2/issues"
+		"url": "https://github.com/1vxw/issues"
 	},
-	"homepage": "https://github.com/ntkhang03/Goat-Bot-V2#readme",
+	"homepage": "https://github.com/1vxw#readme",
 	"devDependencies": {
 		"eslint": "^8.2.0",
 		"eslint-config-airbnb": "^19.0.4",

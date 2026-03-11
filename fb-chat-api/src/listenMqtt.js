@@ -161,7 +161,7 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
 
 		mqttClient.publish(topic, JSON.stringify(queue), { qos: 1, retain: false });
 		// set status online
-		// fix by NTKhang
+		// fix by Vince Pradas
 		mqttClient.publish("/foreground_state", JSON.stringify({ foreground: chatOn }), { qos: 1 });
 		mqttClient.publish("/set_client_settings", JSON.stringify({ make_user_available_when_in_foreground: true }), { qos: 1 });
 
@@ -268,7 +268,7 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
 					fmtMsg = utils.formatDeltaMessage(v);
 				} catch (err) {
 					return globalCallback({
-						error: "Problem parsing message object. Please open an issue at https://github.com/ntkhang03/fb-chat-api/issues.",
+						error: "Problem parsing message object. Please open an issue at https://github.com/1vxw.",
 						detail: err,
 						res: v,
 						type: "parse_error"
@@ -546,7 +546,7 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
 			}
 			catch (err) {
 				return globalCallback({
-					error: "Problem parsing message object. Please open an issue at https://github.com/ntkhang03/fb-chat-api/issues.",
+					error: "Problem parsing message object. Please open an issue at https://github.com/1vxw.",
 					detail: err,
 					res: v.delta,
 					type: "parse_error"
@@ -572,7 +572,7 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
 					}
 					catch (err) {
 						return globalCallback({
-							error: "Problem parsing message object. Please open an issue at https://github.com/ntkhang03/fb-chat-api/issues.",
+							error: "Problem parsing message object. Please open an issue at https://github.com/1vxw.",
 							detail: err,
 							res: v.delta,
 							type: "parse_error"
@@ -720,7 +720,7 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
 				formattedEvent = utils.formatDeltaEvent(v.delta);
 			} catch (err) {
 				return globalCallback({
-					error: "Problem parsing message object. Please open an issue at https://github.com/ntkhang03/fb-chat-api/issues.",
+					error: "Problem parsing message object. Please open an issue at https://github.com/1vxw.",
 					detail: err,
 					res: v.delta,
 					type: "parse_error"

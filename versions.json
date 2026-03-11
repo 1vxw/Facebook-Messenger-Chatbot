@@ -839,7 +839,7 @@
 			"package.json": "add gradient-string package",
 			"package-lock.json": "add gradient-string package",
 			"scripts/cmds/antichangeinfobox.js": "",
-			"scripts/cmds/warn.js": "fixes error `❌ Can't find text on language \"en\" for command \"warn\" with key \"list\"`",
+			"scripts/cmds/warn.js": "fixes error `Can't find text on language \"en\" for command \"warn\" with key \"list\"`",
 			"languages/vi.lang": "language update",
 			"languages/en.lang": "language update",
 			"updater.js": "automatically install dependencies after update",
@@ -855,7 +855,7 @@
 	{
 		"version": "1.2.4",
 		"files": {
-			"scripts/cmds/tik.js": "fixes error `❌ An error occurred, please try again later`"
+			"scripts/cmds/tik.js": "fixes error `An error occurred, please try again later`"
 		}
 	},
 	{
@@ -2305,11 +2305,11 @@
 			"scripts/cmds/ytb.js": "fix: audio cannot be heard on iOS"
 		},
 		"deleteFiles": {
-			"scripts/cmds/batslap.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/ntkhang03/Goat-Bot-V2/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
+			"scripts/cmds/batslap.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/1vxw/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
 			"scripts/cmds/list.js": "",
-			"scripts/cmds/tik.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/ntkhang03/Goat-Bot-V2/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
-			"scripts/cmds/trigger.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/ntkhang03/Goat-Bot-V2/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
-			"scripts/cmds/videofb.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/ntkhang03/Goat-Bot-V2/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588"
+			"scripts/cmds/tik.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/1vxw/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
+			"scripts/cmds/trigger.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/1vxw/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588",
+			"scripts/cmds/videofb.js": "Remove `unnecessary` commands\n\nThese commands are really not necessary, it often crashes due to blocking by 3rd party api, visit the websites to make this smoother, although these commands have been removed from the source code in version new, but if you want to edit it, you can still get it back at the old commit, (of course these commands will no longer be updated) https://github.com/1vxw/tree/8ac704f08e70abcaaf663e4127c4e05e4874c588"
 		}
 	},
 	{

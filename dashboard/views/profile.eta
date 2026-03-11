@@ -33,7 +33,7 @@
         <% if (!user.facebookUserID) { %>
         <div class="data">
           <p style="color: #919aa3">
-            Bạn chưa xác thực id facebook
+            Facebook ID is not verified
           </p>
         </div>
         <% } else { %>
@@ -55,7 +55,7 @@
         <% if (!user.facebookUserID) {%>
         <div class="data">
           <p style="color: #919aa3">
-            Bạn chưa xác thực id facebook
+            Facebook ID is not verified
           </p>
         </div>
         <% } else { %>

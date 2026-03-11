@@ -27,7 +27,7 @@ module.exports = {
 			invalidCharacter: "Hiện tại chỉ có %1 nhân vật trên hệ thống, vui lòng nhập id nhân vật nhỏ hơn",
 			notFoundCharacter: "Không tìm thấy nhân vật mang tên %1 trong danh sách nhân vật",
 			errorGetCharacter: "Đã xảy ra lỗi lấy dữ liệu nhân vật:\n%1: %2",
-			success: "✅ Avatar của bạn\nNhân vật: %1\nMã số: %2\nChữ nền: %3\nChữ ký: %4\nMàu: %5",
+			success: "Avatar của bạn\nNhân vật: %1\nMã số: %2\nChữ nền: %3\nChữ ký: %4\nMàu: %5",
 			defaultColor: "mặc định",
 			error: "Đã xảy ra lỗi\n%1: %2"
 		},
@@ -36,7 +36,7 @@ module.exports = {
 			invalidCharacter: "Currently there are only %1 characters on the system, please enter a character id less than",
 			notFoundCharacter: "No character named %1 was found in the character list",
 			errorGetCharacter: "An error occurred while getting character data:\n%1: %2",
-			success: "✅ Your avatar\nCharacter: %1\nID: %2\nBackground text: %3\nSignature: %4\nColor: %5",
+			success: "Your avatar\nCharacter: %1\nID: %2\nBackground text: %3\nSignature: %4\nColor: %5",
 			defaultColor: "default",
 			error: "An error occurred\n%1: %2"
 		}

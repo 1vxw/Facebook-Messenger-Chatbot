@@ -74,11 +74,34 @@ module.exports = async function (databaseType, userModel, api, fakeGraphql) {
 					switch (databaseType) {
 						case "mongodb":
 						case "sqlite": {
-							let dataCreated = await userModel.create(userData);
+							let dataCreated;
+							try {
+								dataCreated = await userModel.create(userData);
+							}
+							catch (err) {
+								// Another flow may insert the same userID first; return existing data.
+								if (
+									err?.name === "SequelizeUniqueConstraintError"
+									|| err?.name === "SequelizeConstraintError"
+								) {
+									const existed = await userModel.findOne({ where: { userID } });
+									if (existed)
+										dataCreated = existed;
+									else
+										throw err;
+								}
+								else {
+									throw err;
+								}
+							}
 							dataCreated = databaseType === "mongodb" ?
 								_.omit(dataCreated._doc, ["_id", "__v"]) :
 								dataCreated.get({ plain: true });
-							global.db.allUserData.push(dataCreated);
+							const index = _.findIndex(global.db.allUserData, { userID: dataCreated.userID });
+							if (index === -1)
+								global.db.allUserData.push(dataCreated);
+							else
+								global.db.allUserData[index] = dataCreated;
 							return _.cloneDeep(dataCreated);
 						}
 						case "json": {
@@ -255,7 +278,9 @@ module.exports = async function (databaseType, userModel, api, fakeGraphql) {
 			catch (err) {
 				reject_(err);
 			}
-			creatingUserData.splice(creatingUserData.findIndex(u => u.userID == userID), 1);
+			const creatingIndex = creatingUserData.findIndex(u => u.userID == userID);
+			if (creatingIndex !== -1)
+				creatingUserData.splice(creatingIndex, 1);
 		});
 		creatingUserData.push({
 			userID,

@@ -79,7 +79,7 @@ module.exports = {
 			dataWeather = (await axios.get(`https://api.accuweather.com/forecasts/v1/daily/10day/${areaKey}?apikey=${apikey}&details=true&language=en`)).data;	
 		}
 		catch (err) {
-			return message.reply(`❌ Đã xảy ra lỗi: ${err.response.data.Message}`);
+			return message.reply(`Đã xảy ra lỗi: ${err.response.data.Message}`);
 		}
 
 		const dataWeatherDaily = dataWeather.DailyForecasts;

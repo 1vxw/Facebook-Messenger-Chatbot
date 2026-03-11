@@ -27,10 +27,10 @@ module.exports = {
 		description: "Add, remove, edit admin role",
 		guide: "   {pn} [add | -a] <uid>: Add admin role for user\n\t  {pn} [remove | -r] <uid>: Remove admin role of user\n\t  {pn} [list | -l]: List all admins",
 		text: {
-			added: "✅ | Added admin role for %1 users:\n%2",
+			added: "| Added admin role for %1 users:\n%2",
 			alreadyAdmin: "\n⚠️ | %1 users already have admin role:\n%2",
 			missingIdAdd: "⚠️ | Please enter ID or tag user to add admin role",
-			removed: "✅ | Removed admin role of %1 users:\n%2",
+			removed: "| Removed admin role of %1 users:\n%2",
 			notAdmin: "⚠️ | %1 users don't have admin role:\n%2",
 			missingIdRemove: "⚠️ | Please enter ID or tag user to remove admin role",
 			listAdmin: "👑 | List of admins:\n%1"
@@ -105,7 +105,7 @@ module.exports = {
 			invalidCharacter: "Currently there are only %1 characters on the system, please enter a character id less than",
 			notFoundCharacter: "No character named %1 was found in the character list",
 			errorGetCharacter: "An error occurred while getting character data:\n%1: %2",
-			success: "✅ Your avatar\nCharacter: %1\nID: %2\nBackground text: %3\nSignature: %4\nColor: %5",
+			success: "Your avatar\nCharacter: %1\nID: %2\nBackground text: %3\nSignature: %4\nColor: %5",
 			defaultColor: "default",
 			error: "An error occurred\n%1: %2"
 		}
@@ -118,25 +118,25 @@ module.exports = {
 			offText: "off",
 			onlyAdmin: "⚠️ | Only admins can add banned words to the list",
 			missingWords: "⚠️ | You haven't entered the banned words",
-			addedSuccess: "✅ | Added %1 banned words to the list",
-			alreadyExist: "❌ | %1 banned words already exist in the list before: %2",
+			addedSuccess: "| Added %1 banned words to the list",
+			alreadyExist: "| %1 banned words already exist in the list before: %2",
 			tooShort: "⚠️ | %1 banned words cannot be added to the list because they are shorter than 2 characters: %2",
 			onlyAdmin2: "⚠️ | Only admins can delete banned words from the list",
 			missingWords2: "⚠️ | You haven't entered the words to delete",
-			deletedSuccess: "✅ | Deleted %1 banned words from the list",
-			notExist: "❌ | %1 banned words do not exist in the list before: %2",
+			deletedSuccess: "| Deleted %1 banned words from the list",
+			notExist: "| %1 banned words do not exist in the list before: %2",
 			emptyList: "⚠️ | The list of banned words in your group is currently empty",
 			badWordsList: "📑 | The list of banned words in your group: %1",
 			onlyAdmin3: "⚠️ | Only admins can %1 this feature",
-			turnedOnOrOff: "✅ | Banned words warning has been %1",
+			turnedOnOrOff: "| Banned words warning has been %1",
 			onlyAdmin4: "⚠️ | Only admins can delete banned words warning",
 			missingTarget: "⚠️ | You haven't entered user ID or tagged user",
 			notWarned: "⚠️ | User %1 has not been warned for banned words",
-			removedWarn: "✅ | User %1 | %2 has been removed 1 banned words warning",
+			removedWarn: "| User %1 | %2 has been removed 1 banned words warning",
 			warned: "⚠️ | Banned words \"%1\" have been detected in your message, if you continue to violate you will be kicked from the group.",
 			warned2: "⚠️ | Banned words \"%1\" have been detected in your message, you have violated 2 times and will be kicked from the group.",
 			needAdmin: "Bot needs admin privileges to kick banned members",
-			unwarned: "✅ | Removed banned words warning of user %1 | %2"
+			unwarned: "| Removed banned words warning of user %1 | %2"
 		}
 	},
 	balance: {
@@ -157,9 +157,9 @@ module.exports = {
 		description: "turn on do not disturb mode, when you are tagged bot will notify",
 		guide: "   {pn} [empty | <reason>]: turn on do not disturb mode\n   {pn} off: turn off do not disturb mode",
 		text: {
-			turnedOff: "✅ | Do not disturb mode has been turned off",
-			turnedOn: "✅ | Do not disturb mode has been turned on",
-			turnedOnWithReason: "✅ | Do not disturb mode has been turned on with reason: %1",
+			turnedOff: "| Do not disturb mode has been turned off",
+			turnedOn: "| Do not disturb mode has been turned on",
+			turnedOnWithReason: "| Do not disturb mode has been turned on with reason: %1",
 			alreadyOn: "User %1 is currently busy",
 			alreadyOnWithReason: "User %1 is currently busy with reason: %2"
 		}
@@ -184,23 +184,23 @@ module.exports = {
 		guide: "{pn} load <command file name>\n{pn} loadAll\n{pn} install <url> <command file name>: Download and install a command file from a url, url is the path to the file (raw)",
 		text: {
 			missingFileName: "⚠️ | Please enter the command name you want to reload",
-			loaded: "✅ | Loaded command \"%1\" successfully",
-			loadedError: "❌ | Failed to load command \"%1\" with error\n%2: %3",
-			loadedSuccess: "✅ | Loaded successfully \"%1\" command",
-			loadedFail: "❌ | Failed to load \"%1\" command\n%2",
+			loaded: "| Loaded command \"%1\" successfully",
+			loadedError: "| Failed to load command \"%1\" with error\n%2: %3",
+			loadedSuccess: "| Loaded successfully \"%1\" command",
+			loadedFail: "| Failed to load \"%1\" command\n%2",
 			missingCommandNameUnload: "⚠️ | Please enter the command name you want to unload",
-			unloaded: "✅ | Unloaded command \"%1\" successfully",
-			unloadedError: "❌ | Failed to unload command \"%1\" with error\n%2: %3",
+			unloaded: "| Unloaded command \"%1\" successfully",
+			unloadedError: "| Failed to unload command \"%1\" with error\n%2: %3",
 			missingUrlCodeOrFileName: "⚠️ | Please enter the url or code and command file name you want to install",
 			missingUrlOrCode: "⚠️ | Please enter the url or code of the command file you want to install",
 			missingFileNameInstall: "⚠️ | Please enter the file name to save the command (with .js extension)",
 			invalidUrlOrCode: "⚠️ | Unable to get command code",
 			alreadExist: "⚠️ | The command file already exists, are you sure you want to overwrite the old command file?\nReact to this message to continue",
-			installed: "✅ | Installed command \"%1\" successfully, the command file is saved at %2",
-			installedError: "❌ | Failed to install command \"%1\" with error\n%2: %3",
+			installed: "| Installed command \"%1\" successfully, the command file is saved at %2",
+			installedError: "| Failed to install command \"%1\" with error\n%2: %3",
 			missingFile: "⚠️ | Command file \"%1\" not found",
 			invalidFileName: "⚠️ | Invalid command file name",
-			unloadedFile: "✅ | Unloaded command \"%1\""
+			unloadedFile: "| Unloaded command \"%1\""
 		}
 	},
 	count: {
@@ -273,7 +273,7 @@ module.exports = {
 		description: "Test code quickly",
 		guide: "{pn} <code to test>",
 		text: {
-			error: "❌ An error occurred:"
+			error: "An error occurred:"
 		}
 	},
 	event: {
@@ -281,23 +281,23 @@ module.exports = {
 		guide: "{pn} load <command file name>\n{pn} loadAll\n{pn} install <url> <command file name>: Download and load event command, url is the path to the command file (raw)",
 		text: {
 			missingFileName: "⚠️ | Please enter the command name you want to reload",
-			loaded: "✅ | Loaded event command \"%1\" successfully",
-			loadedError: "❌ | Loaded event command \"%1\" failed with error\n%2: %3",
-			loadedSuccess: "✅ | Loaded \"%1\" event command successfully",
-			loadedFail: "❌ | Loaded event command \"%1\" failed\n%2",
+			loaded: "| Loaded event command \"%1\" successfully",
+			loadedError: "| Loaded event command \"%1\" failed with error\n%2: %3",
+			loadedSuccess: "| Loaded \"%1\" event command successfully",
+			loadedFail: "| Loaded event command \"%1\" failed\n%2",
 			missingCommandNameUnload: "⚠️ | Please enter the command name you want to unload",
-			unloaded: "✅ | Unloaded event command \"%1\" successfully",
-			unloadedError: "❌ | Unloaded event command \"%1\" failed with error\n%2: %3",
+			unloaded: "| Unloaded event command \"%1\" successfully",
+			unloadedError: "| Unloaded event command \"%1\" failed with error\n%2: %3",
 			missingUrlCodeOrFileName: "⚠️ | Please enter the url or code and command file name you want to install",
 			missingUrlOrCode: "⚠️ | Please enter the url or code of the command file you want to install",
 			missingFileNameInstall: "⚠️ | Please enter the file name to save the command (with .js extension)",
 			invalidUrlOrCode: "⚠️ | Unable to get command code",
 			alreadExist: "⚠️ | The command file already exists, are you sure you want to overwrite the old command file?\nReact to this message to continue",
-			installed: "✅ | Installed event command \"%1\" successfully, the command file is saved at %2",
-			installedError: "❌ | Installed event command \"%1\" failed with error\n%2: %3",
+			installed: "| Installed event command \"%1\" successfully, the command file is saved at %2",
+			installedError: "| Installed event command \"%1\" failed with error\n%2: %3",
 			missingFile: "⚠️ | File \"%1\" not found",
 			invalidFileName: "⚠️ | Invalid file name",
-			unloadedFile: "✅ | Unloaded command \"%1\""
+			unloadedFile: "| Unloaded command \"%1\""
 		}
 	},
 	filteruser: {
@@ -306,11 +306,11 @@ module.exports = {
 		text: {
 			needAdmin: "⚠️ | Please add the bot as a group admin to use this command",
 			confirm: "⚠️ | Are you sure you want to delete group members with less than %1 messages?\nReact to this message to confirm",
-			kickByBlock: "✅ | Successfully deleted %1 members who are locked acc",
-			kickByMsg: "✅ | Successfully deleted %1 members with less than %2 messages",
-			kickError: "❌ | An error occurred and could not kick %1 members:\n%2",
-			noBlock: "✅ | There are no members who are locked acc",
-			noMsg: "✅ | There are no members with less than %1 messages"
+			kickByBlock: "| Successfully deleted %1 members who are locked acc",
+			kickByMsg: "| Successfully deleted %1 members with less than %2 messages",
+			kickError: "| An error occurred and could not kick %1 members:\n%2",
+			noBlock: "| There are no members who are locked acc",
+			noMsg: "| There are no members with less than %1 messages"
 		}
 	},
 	getfbstate: {
@@ -382,7 +382,7 @@ module.exports = {
 			missingMessage: "Please enter the message you want to send to all groups",
 			notification: "Notification from admin bot to all chat groups (do not reply to this message)",
 			sendingNotification: "Start sending notification from admin bot to %1 chat groups",
-			sentNotification: "✅ Sent notification to %1 groups successfully",
+			sentNotification: "Sent notification to %1 groups successfully",
 			errorSendingNotification: "An error occurred while sending to %1 groups:\n %2"
 		}
 	},
@@ -396,7 +396,7 @@ module.exports = {
 			confirmThisThread: "Please react to this message to confirm change prefix in your box chat",
 			successGlobal: "Changed prefix of system bot to: %1",
 			successThisThread: "Changed prefix in your box chat to: %1",
-			myPrefix: "🌐 System prefix: %1\n🛸 Your box chat prefix: %2"
+			myPrefix: "System prefix: %1\n🛸 Your box chat prefix: %2"
 		}
 	},
 	rank: {
@@ -416,8 +416,8 @@ module.exports = {
 		description: "refresh information of group chat or user",
 		guide: "   {pn} [thread | group]: refresh information of your group chat\n   {pn} group <threadID>: refresh information of group chat by ID\n\n   {pn} user: refresh information of your user\n   {pn} user [<userID> | @tag]: refresh information of user by ID",
 		text: {
-			refreshMyThreadSuccess: "✅ | Refresh information of your group chat successfully!",
-			refreshThreadTargetSuccess: "✅ | Refresh information of group chat %1 successfully!"
+			refreshMyThreadSuccess: "| Refresh information of your group chat successfully!",
+			refreshThreadTargetSuccess: "| Refresh information of group chat %1 successfully!"
 		}
 	},
 	rules: {
@@ -459,9 +459,9 @@ module.exports = {
 	setavt: {
 		description: "Change bot avatar",
 		text: {
-			cannotGetImage: "❌ | An error occurred while querying the image url",
-			invalidImageFormat: "❌ | Invalid image format",
-			changedAvatar: "✅ | Changed bot avatar successfully"
+			cannotGetImage: "| An error occurred while querying the image url",
+			invalidImageFormat: "| Invalid image format",
+			changedAvatar: "| Changed bot avatar successfully"
 		}
 	},
 	setlang: {
@@ -508,7 +508,7 @@ module.exports = {
 		description: "Edit role of command (commands with role < 2)",
 		guide: "   {pn} <commandName> <new role>: set new role for command\n   With:\n   + <commandName>: command name\n   + <new role>: new role of command with:\n   + <new role> = 0: command can be used by all members in group\n   + <new role> = 1: command can be used by admin only\n   + <new role> = default: reset role of command to default\n   Example:\n    {pn} rank 1: (command rank can be used by admin only)\n    {pn} rank 0: (command rank can be used by all members in group)\n    {pn} rank default: reset to default\n—————\n   {pn} [viewrole|view|show]: view role of edited commands",
 		text: {
-			noEditedCommand: "✅ Your group has no edited command",
+			noEditedCommand: "Your group has no edited command",
 			editedCommand: "⚠️ Your group has edited commands:\n",
 			noPermission: "❗ Only admin can use this command",
 			commandNotFound: "Command \"%1\" not found",
@@ -580,7 +580,7 @@ module.exports = {
 		text: {
 			noPermission: "You don't have permission to use this feature",
 			found: "🔎 Found %1 group matching the keyword \"%3\" in bot data:\n%3",
-			notFound: "❌ No group found matching the keyword: \"%1\" in bot data",
+			notFound: "No group found matching the keyword: \"%1\" in bot data",
 			hasBanned: "Group with id [%1 | %2] has been banned before:\n» Reason: %3\n» Time: %4",
 			banned: "Banned group with id [%1 | %2] using bot.\n» Reason: %3\n» Time: %4",
 			notBanned: "Group with id [%1 | %2] is not banned using bot",
@@ -627,7 +627,7 @@ module.exports = {
 		description: "Manage users in bot system",
 		guide: "   {pn} [find | -f | search | -s] <name to find>: search for users in bot data by name\n\n   {pn} [ban | -b] [<uid> | @tag | reply message] <reason>: to ban user with id <uid> or tagged user or sender of message replied using bot\n\n   {pn} unban [<uid> | @tag | reply message]: to unban user using bot",
 		text: {
-			noUserFound: "❌ No user found with name matching keyword: \"%1\" in bot data",
+			noUserFound: "No user found with name matching keyword: \"%1\" in bot data",
 			userFound: "🔎 Found %1 user with name matching keyword \"%2\" in bot data:\n%3",
 			uidRequired: "Uid of user to ban cannot be empty, please enter uid or tag or reply message of 1 user by user ban <uid> <reason>",
 			reasonRequired: "Reason to ban user cannot be empty, please enter uid or tag or reply message of 1 user by user ban <uid> <reason>",
@@ -658,18 +658,18 @@ module.exports = {
 			listBanEmpty: "Your group has no members banned from the box",
 			invalidUid: "Please enter a valid uid of the person you want to view information",
 			noData: "No data",
-			noPermission: "❌ Only group administrators can unban members banned from the box",
+			noPermission: "Only group administrators can unban members banned from the box",
 			invalidUid2: "⚠️ Please enter a valid uid of the person you want to unban",
 			notBanned: "⚠️ The user with id %1 has not been banned from your box",
-			unbanSuccess: "✅ Successfully unbanned member [%1 | %2], currently this person can join your chat box",
-			noPermission2: "❌ Only group administrators can remove warnings from members in the group",
+			unbanSuccess: "Successfully unbanned member [%1 | %2], currently this person can join your chat box",
+			noPermission2: "Only group administrators can remove warnings from members in the group",
 			invalidUid3: "⚠️ Please enter a uid or tag the person you want to remove the warning",
 			noData2: "⚠️ The user with id %1 has no warning data",
-			notEnoughWarn: "❌ The user %1 only has %2 warnings",
-			unwarnSuccess: "✅ Successfully removed the %1 warning of member [%2 | %3]",
-			noPermission3: "❌ Only group administrators can reset warning data",
-			resetWarnSuccess: "✅ Successfully reset warning data",
-			noPermission4: "❌ Only group administrators can warn members in the group",
+			notEnoughWarn: "The user %1 only has %2 warnings",
+			unwarnSuccess: "Successfully removed the %1 warning of member [%2 | %3]",
+			noPermission3: "Only group administrators can reset warning data",
+			resetWarnSuccess: "Successfully reset warning data",
+			noPermission4: "Only group administrators can warn members in the group",
 			invalidUid4: "⚠️ You need to tag or reply to the message of the person you want to warn",
 			warnSuccess: "⚠️ Warned member %1 times %2\n- Uid: %3\n- Reason: %4\n- Date Time: %5\nThis member has been warned 3 times and banned from the box, to unban use the command \"%6warn unban <uid>\" (with uid is the uid of the person you want to unban)",
 			noPermission5: "⚠️ Bot needs administrator permissions to kick banned members",

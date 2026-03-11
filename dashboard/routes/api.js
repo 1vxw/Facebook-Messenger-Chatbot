@@ -131,7 +131,7 @@ module.exports = function ({ isAuthenticated, isVeryfiUserIDFacebook, checkHasAn
 					return res.status(400).json({
 						status: "error",
 						error: "PERMISSION_DENIED",
-						message: "You are not authorized to upload file in this thread"
+						message: "You do not have permission to edit data in this thread"
 					});
 
 				let files = req.files;
@@ -259,7 +259,7 @@ module.exports = function ({ isAuthenticated, isVeryfiUserIDFacebook, checkHasAn
 				return res.status(400).json({
 					status: "error",
 					error: "PERMISSION_DENIED",
-					message: "Bạn không có quyền chỉnh sửa dữ liệu trong nhóm này"
+					message: "You do not have permission to edit data in this thread"
 				});
 			const threadData = await threadsData.get(threadID);
 			try {
@@ -296,7 +296,7 @@ module.exports = function ({ isAuthenticated, isVeryfiUserIDFacebook, checkHasAn
 				return res.status(400).send({
 					status: "error",
 					error: "SERVER_ERROR",
-					message: "Đã có lỗi xảy ra, vui lòng thử lại sau"
+					message: "An error occurred, please try again later"
 				});
 			}
 
@@ -310,7 +310,7 @@ module.exports = function ({ isAuthenticated, isVeryfiUserIDFacebook, checkHasAn
 				res.status(500).json({
 					status: "error",
 					error: "FAILED_TO_SAVE_DATA",
-					message: "Đã có lỗi xảy ra, vui lòng thử lại sau"
+					message: "An error occurred, please try again later"
 				});
 			}
 		})

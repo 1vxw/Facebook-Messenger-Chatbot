@@ -2,13 +2,22 @@ const utils = require("../utils");
 const log = require("npmlog");
 
 module.exports = function (defaultFuncs, api, ctx) {
+	function normalizeAttachment(att) {
+		if (utils.isReadableStream(att))
+			return att;
+		if (att && typeof att == "object" && utils.isReadableStream(att.value))
+			return att;
+		return null;
+	}
+
 	function upload(attachments, callback) {
 		callback = callback || function () { };
 		const uploads = [];
 
 		// create an array of promises
 		for (let i = 0; i < attachments.length; i++) {
-			if (!utils.isReadableStream(attachments[i])) {
+			const payload = normalizeAttachment(attachments[i]);
+			if (!payload) {
 				throw {
 					error:
 						"Attachment should be a readable stream and not " +
@@ -18,7 +27,7 @@ module.exports = function (defaultFuncs, api, ctx) {
 			}
 
 			const form = {
-				upload_1024: attachments[i],
+				upload_1024: payload,
 				voice_clip: "true"
 			};
 

@@ -55,7 +55,7 @@ module.exports = function (_defaultFuncs, _api, _ctx) {
 
 		/**
 		 * July 06, 2022
-		 * added by @NTKhang
+		 * added by @Vince Pradas
 		 */
 		Earth: "1833559466821043",
 		Support: "365557122117011",
@@ -100,13 +100,13 @@ module.exports = function (_defaultFuncs, _api, _ctx) {
 
 		/**
 		 * July 15, 2022
-		 * added by @NTKhang
+		 * added by @Vince Pradas
 		 */
 		NonBinary: "737761000603635",
 
 		/**
 		 * November 25, 2022
-		 * added by @NTKhang
+		 * added by @Vince Pradas
 		 */
 		ThankfulForFriends: "1318983195536293",
 		Transgender: "504518465021637",

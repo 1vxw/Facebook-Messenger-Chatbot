@@ -7,7 +7,7 @@ module.exports = {
 	config: {
 		name: "update",
 		version: "1.5",
-		author: "Chat GPT, NTKhang",
+		author: "Chat GPT, Vince Pradas",
 		role: 2,
 		description: {
 			en: "Check for and install updates for the chatbot.",
@@ -22,32 +22,32 @@ module.exports = {
 
 	langs: {
 		vi: {
-			noUpdates: "✅ | Bạn đang sử dụng phiên bản mới nhất của GoatBot V2 (v%1).",
+			noUpdates: "| Bạn đang sử dụng phiên bản mới nhất của GoatBot V2 (v%1).",
 			updatePrompt: "💫 | Bạn đang sử dụng phiên bản %1. Hiện tại đã có phiên bản %2. Bạn có muốn cập nhật chatbot lên phiên bản mới nhất không?"
 				+ "\n\n⬆️ | Các tệp sau sẽ được cập nhật:"
 				+ "\n%3%4"
-				+ "\n\nℹ️ | Xem chi tiết tại https://github.com/ntkhang03/Goat-Bot-V2/commits/main"
+				+ "\n\nℹ️ | Xem chi tiết tại https://github.com/1vxw/commits/main"
 				+ "\n💡 | Thả cảm xúc bất kỳ vào tin nhắn này để xác nhận",
 			fileWillDelete: "\n🗑️ | Các tệp/thư mục sau sẽ bị xóa:\n%1",
 			andMore: " ...và %1 tệp khác",
 			updateConfirmed: "🚀 | Đã xác nhận, đang cập nhật...",
-			updateComplete: "✅ | Cập nhật thành công, bạn có muốn khởi động lại chatbot ngay bây giờ không (phản hồi tin nhắn với nội dung \"yes\" hoặc \"y\" để xác nhận).",
+			updateComplete: "| Cập nhật thành công, bạn có muốn khởi động lại chatbot ngay bây giờ không (phản hồi tin nhắn với nội dung \"yes\" hoặc \"y\" để xác nhận).",
 			updateTooFast: "⭕ Vì bản cập nhật gần nhất được thực phát hành cách đây %1 phút %2 giây nên không thể cập nhật. Vui lòng thử lại sau %3 phút %4 giây nữa để cập nhật không bị lỗi.",
-			botWillRestart: "🔄 | Bot sẽ khởi động lại ngay!"
+			botWillRestart: "| Bot sẽ khởi động lại ngay!"
 		},
 		en: {
-			noUpdates: "✅ | You are using the latest version of Vance V2 (v%1).",
+			noUpdates: "| You are using the latest version of Vance V2 (v%1).",
 			updatePrompt: "💫 | You are using version %1. There is a new version %2. Do you want to update the chatbot to the latest version?"
 				+ "\n\n⬆️ | The following files will be updated:"
 				+ "\n%3%4"
-				+ "\n\nℹ️ | See details at https://github.com/ntkhang03/Goat-Bot-V2/commits/main"
+				+ "\n\nℹ️ | See details at https://github.com/1vxw/commits/main"
 				+ "\n💡 | React to this message to confirm.",
 			fileWillDelete: "\n🗑️ | The following files/folders will be deleted:\n%1",
 			andMore: " ...and %1 more files",
 			updateConfirmed: "🚀 | Confirmed, updating...",
-			updateComplete: "✅ | Update complete, do you want to restart the chatbot now (reply with \"yes\" or \"y\" to confirm)?",
+			updateComplete: "| Update complete, do you want to restart the chatbot now (reply with \"yes\" or \"y\" to confirm)?",
 			updateTooFast: "⭕ Because the latest update was released %1 minutes %2 seconds ago, you can't update now. Please try again after %3 minutes %4 seconds to avoid errors.",
-			botWillRestart: "🔄 | The bot will restart now!"
+			botWillRestart: "| The bot will restart now!"
 		}
 	},
 

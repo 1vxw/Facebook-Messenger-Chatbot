@@ -52,7 +52,7 @@ module.exports = {
 
 	langs: {
 		vi: {
-			error: "❌ Đã xảy ra lỗi: %1",
+			error: "Đã xảy ra lỗi: %1",
 			noResult: "⭕ Không có kết quả tìm kiếm nào phù hợp với từ khóa %1",
 			choose: "%1Reply tin nhắn với số để chọn hoặc nội dung bất kì để gỡ",
 			video: "video",
@@ -65,7 +65,7 @@ module.exports = {
 			listChapter: "\n📖 Danh sách phân đoạn: %1\n"
 		},
 		en: {
-			error: "❌ An error occurred: %1",
+			error: "An error occurred: %1",
 			noResult: "⭕ No search results match the keyword %1",
 			choose: "%1Reply to the message with a number to choose or any content to cancel",
 			video: "video",

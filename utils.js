@@ -346,18 +346,61 @@ function jsonStringifyColor(obj, filter, indent, level) {
 
 
 function message(api, event) {
+	function trackBotMessage(sentInfo) {
+		try {
+			const messageID = sentInfo?.messageID;
+			if (!messageID)
+				return;
+			const threadID = String(event.threadID || "");
+			if (!threadID)
+				return;
+			if (!global.temp.botSentMessages)
+				global.temp.botSentMessages = {};
+			if (!global.temp.botSentMessages[threadID])
+				global.temp.botSentMessages[threadID] = [];
+			global.temp.botSentMessages[threadID].push({
+				id: messageID,
+				ts: Date.now()
+			});
+			if (global.temp.botSentMessages[threadID].length > 5000)
+				global.temp.botSentMessages[threadID] = global.temp.botSentMessages[threadID].slice(-5000);
+		}
+		catch (_e) {}
+	}
+
+	function sanitizeResponseText(text) {
+		return String(text || "")
+			.replace(/^\s*\|\s+/gm, "")
+			.replace(/\s\|\s/g, " ")
+			.replace(/  +/g, " ")
+			.replace(/[ \t]+\n/g, "\n")
+			.trim();
+	}
+
+	function sanitizeForm(form) {
+		if (typeof form === "string")
+			return sanitizeResponseText(form);
+		if (form && typeof form === "object" && typeof form.body === "string")
+			return { ...form, body: sanitizeResponseText(form.body) };
+		return form;
+	}
+
 	async function sendMessageError(err) {
 		if (typeof err === "object" && !err.stack)
 			err = utils.removeHomeDir(JSON.stringify(err, null, 2));
 		else
 			err = utils.removeHomeDir(`${err.name || err.error}: ${err.message}`);
-		return await api.sendMessage(utils.getText("utils", "errorOccurred", err), event.threadID, event.messageID);
+		const info = await api.sendMessage(sanitizeResponseText(utils.getText("utils", "errorOccurred", err)), event.threadID, event.messageID);
+		trackBotMessage(info);
+		return info;
 	}
 	return {
 		send: async (form, callback) => {
 			try {
 				global.statusAccountBot = 'good';
-				return await api.sendMessage(form, event.threadID, callback);
+				const info = await api.sendMessage(sanitizeForm(form), event.threadID, callback);
+				trackBotMessage(info);
+				return info;
 			}
 			catch (err) {
 				if (JSON.stringify(err).includes('spam')) {
@@ -369,7 +412,9 @@ function message(api, event) {
 		reply: async (form, callback) => {
 			try {
 				global.statusAccountBot = 'good';
-				return await api.sendMessage(form, event.threadID, callback, event.messageID);
+				const info = await api.sendMessage(sanitizeForm(form), event.threadID, callback, event.messageID);
+				trackBotMessage(info);
+				return info;
 			}
 			catch (err) {
 				if (JSON.stringify(err).includes('spam')) {

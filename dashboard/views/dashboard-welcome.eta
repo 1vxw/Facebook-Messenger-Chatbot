@@ -9,22 +9,22 @@
 <% 
 const shortcuts = [{
 	name: "{userName}",
-	desc: "tên thành viên mới vào nhóm"
+	desc: "new member name"
 }, {
 	name: "{userNameTag}",
-	desc: "tên thành viên mới vào nhóm (tag trong tin nhắn)"
+	desc: "new member name (mentioned)"
 }, {
 	name: "{threadName}",
-	desc: "tên nhóm chat của bạn"
+	desc: "thread name"
 }, {
 	name: "{boxName}",
-	desc: "tên nhóm chat của bạn"
+	desc: "thread name"
 }, {
 	name: "{session}",
-	desc: "buổi trong ngày"
+	desc: "time of day"
 }, {
 	name: "{multiple}",
-	desc: "bạn | các bạn"
+	desc: "you | everyone"
 }];
 %>
 
@@ -45,13 +45,13 @@ const shortcuts = [{
     <span class="fw-bold mb-0 me-3" style="font-size: 1.2rem;">Thread ID: <%=threadID%></span>
   </div>
 
-  <h3 class="text-center">Custom Welcome Message 👋</h3>
+  <h3 class="text-center">Custom Welcome Message</h3>
 
   <div class="row justify-content-between mt-3">
     <div class="col-12 col-lg-6 mb-3">
       <div class="row list" id="list-shortcut">
-        <h4>Danh sách các shortcut có sẵn:</h4>
-        <span class="text-muted mb-2">(Click vào shortcut để copy)</span>
+        <h4>Available shortcuts:</h4>
+        <span class="text-muted mb-2">(Click a shortcut to copy)</span>
 
         <% for (const item of shortcuts) { %>
         <div class="ms-2">
@@ -62,7 +62,7 @@ const shortcuts = [{
     </div>
 
     <div class="col-12 col-lg-6 mb-3">
-      <h4 class="mb-2">Tin nhắn chào mừng thành viên mới:</h4>
+      <h4 class="mb-2">Welcome message for new members:</h4>
       <textarea class="textarea-welcome-message form-control rounded" rows="7" id="message" spellcheck="false" style="resize: none;"><%=threadData.data.welcomeMessage || defaultWelcomeMessage%></textarea>
     </div>
     <script>
@@ -79,10 +79,10 @@ const shortcuts = [{
   </div>
 
   <hr>
-  <h4>Những tệp được gửi kèm tin nhắn chào mừng trong nhóm bạn:</h4>
+  <h4>Files attached to welcome messages in this thread:</h4>
   <button class="mt-1 btn btn-sm btn-phoenix-danger disabled" id="delete-attachment-chosen">
     <i class="fas fa-trash"></i>
-    Xóa tệp đính kèm đã chọn
+    Delete selected attachments
   </button>
 
   <div data-list="" class="table-responsive scrollbar" id="table-welcome-attachment">
@@ -259,7 +259,7 @@ const shortcuts = [{
       if (myDropzone.getFilesWithStatus(Dropzone.ADDED).length == 0)
         return $.createToast({
           title: "Warning",
-          message: "Không có file nào được chọn",
+          message: "No files selected",
           type: "warning"
         });
       btnUploadAll.html(`<span class="spinner-grow spinner-grow-sm text-info" role="status" aria-hidden="true"></span> Upload`);
@@ -274,7 +274,7 @@ const shortcuts = [{
       if (myDropzone.getFilesWithStatus(Dropzone.UPLOADING).length > 0) {
         $.createToast({
           title: "Warning",
-          message: "Đang có file đang được upload, vui lòng chờ",
+          message: "A file upload is in progress, please wait",
           type: "warning"
         });
         myDropzone.removeFile(file);
@@ -288,7 +288,7 @@ const shortcuts = [{
       if (totalFileAdded + childEl > totalFilesCanUpload) {
         $.createToast({
           title: "Warning",
-          message: `Chỉ được phép upload tối đa ${totalFilesCanUpload} file`,
+          message: `Only up to ${totalFilesCanUpload} files can be uploaded`,
           type: "warning"
         });
         myDropzone.removeFile(file);
@@ -395,14 +395,14 @@ const shortcuts = [{
         success: function(data) {
           $.createToast({
             title: "Success",
-            message: "Lưu thành công",
+            message: "Saved successfully",
             type: "success"
           })
         },
         error: function(err) {
           $.createToast({
             title: "Error",
-            message: "Đã xảy ra lỗi, vui lòng thử lại",
+            message: "An error occurred, please try again",
             type: "error"
           })
         }
@@ -465,11 +465,11 @@ const shortcuts = [{
         // remove modal
         confirmDeleteAttachment.modal("hide");
 
-        btnDeleteAttachmentChosen.html(`<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Xóa tệp đính kèm đã chọn`);
+        btnDeleteAttachmentChosen.html(`<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Delete selected attachments`);
         btnDeleteAttachmentChosen.addClass("disabled");
 
         deleteFiles(fileIDs, function(res) {
-          btnDeleteAttachmentChosen.html(`Xóa tệp đính kèm đã chọn`);
+          btnDeleteAttachmentChosen.html(`Delete selected attachments`);
           btnDeleteAttachmentChosen.removeClass("disabled");
           const success = res.responseJSON.success;
           for (const fileID of success) {
@@ -491,15 +491,15 @@ const shortcuts = [{
 				<div class="modal-dialog modal-dialog-centered">
 					<div class="modal-content">
 						<div class="modal-header">
-							<h5 class="modal-title" id="confirmDeleteAttachmentsLabel">Xóa tệp đính kèm đã chọn</h5>
+							<h5 class="modal-title" id="confirmDeleteAttachmentsLabel">Delete selected attachments</h5>
 							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 						</div>
 						<div class="modal-body">
-						<p class="mb-0">Bạn có chắc chắn muốn xóa <strong>${fileIDs.length}</strong> tệp đính kèm đã chọn?</p>
+						<p class="mb-0">Are you sure you want to delete <strong>${fileIDs.length}</strong> selected attachments?</p>
 						</div>
 						<div class="modal-footer">
-							<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
-							<button type="button" class="btn btn-danger" id="confirmDeleteAttachmentsBtn">Xóa</button>
+							<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+							<button type="button" class="btn btn-danger" id="confirmDeleteAttachmentsBtn">Delete</button>
 						</div>
 					</div>
 				</div>
@@ -538,28 +538,28 @@ const shortcuts = [{
           if (data.status == 'error')
             return $.createToast({
               title: "Error",
-              message: "Đã xảy ra lỗi, vui lòng thử lại",
+              message: "An error occurred, please try again",
               type: "error"
             });
 
           if (data.success.length)
             $.createToast({
               title: "Success",
-              message: `Xóa ${data.success.length} file thành công`,
+              message: `Deleted ${data.success.length} files successfully`,
               type: "success"
             });
 
           if (data.failed.length)
             $.createToast({
               title: "Success",
-              message: `Xóa ${data.failed.length} file thất bại`,
+              message: `Failed to delete ${data.failed.length} files`,
               type: "error"
             });
         },
         error: function() {
           $.createToast({
             title: "Error",
-            message: `Xóa file thất bại, vui lòng thử lại sau`,
+            message: `Delete failed, please try again later`,
             type: "error"
           });
         },
@@ -623,7 +623,7 @@ const shortcuts = [{
         $("#delete-attachment-chosen").addClass("disabled");
     }
 
-    // lắng nghe sự kiện khi số lượng files trong dropzone thay đổi
+    // listen for dropzone file count changes
     function handleDropzoneFilesChange(myDropzone) {
       const totalFileAdded = myDropzone.getFilesWithStatus(Dropzone.ADDED).length;
       const childEl = $('.dropzone-item').length;
@@ -640,7 +640,7 @@ const shortcuts = [{
         if (totalFileAdded > totalFilesCanUpload) {
           $.createToast({
             title: "Warning",
-            message: `Chỉ được phép upload tối đa ${totalFilesCanUpload} file`,
+            message: `Only up to ${totalFilesCanUpload} files can be uploaded`,
             type: "warning"
           });
           myDropzone.removeFile(myDropzone.files[myDropzone.files - 1]);

@@ -21,25 +21,25 @@ module.exports = function ({ unAuthenticated, validateEmail, randomNumberApikey,
 		.post("/", unAuthenticated, async (req, res) => {
 			const { email } = req.body;
 			if (!validateEmail(email)) {
-				req.flash("errors", { msg: "Địa chỉ email không hợp lệ" });
+				req.flash("errors", { msg: "Email address is invalid" });
 				return res.redirect("/forgot-password");
 			}
 			const user = await dashBoardData.get(email);
 			if (!user) {
-				req.flash("errors", { msg: "Không tìm thấy email này" });
+				req.flash("errors", { msg: "Email not found" });
 				return res.redirect("/forgot-password");
 			}
 			const code = randomNumberApikey(6);
 			try {
 				await transporter.sendMail({
-					from: "Goat-Bot",
+					from: "VXW",
 					to: email,
 					subject: "Reset your password",
-					html: generateEmailVerificationCode(code, "Xin chào, bạn đã yêu cầu reset mật khẩu tại Goat-Bot. Bên dưới là mã xác nhận của bạn.")
+					html: generateEmailVerificationCode(code, "Hello, you requested a password reset for your VXW dashboard account. Use the code below to continue.")
 				});
 			}
 			catch (e) {
-				req.flash("errors", { msg: "Không thể gửi email, vui lòng thử lại sau" });
+				req.flash("errors", { msg: "Cannot send email right now. Please try again later." });
 				return res.redirect("/forgot-password");
 			}
 			req.session.resetPassword = {
@@ -57,7 +57,7 @@ module.exports = function ({ unAuthenticated, validateEmail, randomNumberApikey,
 			if (!resetPassword)
 				return res.redirect("/forgot-password");
 			if (code !== resetPassword.code) {
-				req.flash("errors", { msg: "Mã xác nhận không chính xác" });
+				req.flash("errors", { msg: "Verification code is incorrect" });
 				return res.redirect("/forgot-password/submit-code");
 			}
 			res.redirect("/forgot-password/new-password");
@@ -68,17 +68,17 @@ module.exports = function ({ unAuthenticated, validateEmail, randomNumberApikey,
 			const email = req.session.resetPassword.email;
 			const { password, password_confirmation } = req.body;
 			if (password !== password_confirmation) {
-				req.flash("errors", { msg: "Mật khẩu không khớp" });
+				req.flash("errors", { msg: "Passwords do not match" });
 				return res.redirect("/forgot-password/new-password");
 			}
 			if (password.length < 6) {
-				req.flash("errors", { msg: "Mật khẩu phải có ít nhất 6 ký tự" });
+				req.flash("errors", { msg: "Password must be at least 6 characters" });
 				return res.redirect("/forgot-password/new-password");
 			}
 			const hashPassword = bcrypt.hashSync(password, 10);
 			await dashBoardData.set(email, { password: hashPassword });
 			delete req.session.resetPassword;
-			req.flash("success", { msg: "Đã thay đổi mật khẩu thành công" });
+			req.flash("success", { msg: "Password changed successfully" });
 			res.redirect("/login");
 		});
 

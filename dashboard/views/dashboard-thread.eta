@@ -1,29 +1,25 @@
-<%~ includeFile("partials/header.eta", {
-	user: user
-}); %>
+<%~ includeFile("partials/header.eta", { user: user }); %>
 <%~ includeFile("partials/message.eta"); %>
 <%~ includeFile("partials/title.eta", {
 	icon: "fas fa-cog",
 	title: "Dashboard"
 }); %>
 <%
-	const { threadID } = threadData; 
+	const { threadID } = threadData;
 %>
 
 <form id="setData" class="container">
   <br>
 	<div class="bg-300 rounded-5 py-4">
-		<h5 class="text-center">Box Name: <%= threadData.threadName %></h5>
-		<p class="mt-2 mb-0 text-center">Box ID: <%= threadData.threadID %></p>
+		<h5 class="text-center">Thread Name: <%= threadData.threadName %></h5>
+		<p class="mt-2 mb-0 text-center">Thread ID: <%= threadData.threadID %></p>
 	</div>
 
 	<hr>
 
 	<div class="bg-300 rounded-5 py-4 px-4 mt-2" role="button" onclick="window.location.href='/dashboard/<%= threadID %>/welcome'">
 		<div class="row justify-content-between">
-			<div class="col-auto">
-				<h4>👋 Welcome</h4>
-			</div>
+			<div class="col-auto"><h4>Welcome</h4></div>
 			<div class="col-auto">
 				<label class="switch">
 					<div class="form-check form-switch">
@@ -33,14 +29,12 @@
 				</label>
 			</div>
 		</div>
-		<p class="text-700 lead fs-1 ms-2 mb-0">Gửi tin nhắn chào mừng thành viên mới!</p>
+		<p class="text-700 lead fs-1 ms-2 mb-0">Send a welcome message to new members.</p>
 	</div>
 
 	<div class="bg-300 rounded-5 py-4 px-4 mt-2" role="button" onclick="window.location.href='/dashboard/<%= threadID %>/leave'">
 		<div class="row justify-content-between">
-			<div class="col-auto">
-				<h4>🤧 Leave</h4>
-			</div>
+			<div class="col-auto"><h4>Leave</h4></div>
 			<div class="col-auto">
 				<label class="switch">
 					<div class="form-check form-switch">
@@ -50,14 +44,12 @@
 				</label>
 			</div>
 		</div>
-		<p class="text-700 lead fs-1 ms-2 mb-0">Gửi tin nhắn tạm biệt thành viên rời khỏi nhóm!</p>
+		<p class="text-700 lead fs-1 ms-2 mb-0">Send a leave message when members leave.</p>
 	</div>
 
 	<div class="bg-300 rounded-5 py-4 px-4 mt-2" role="button" onclick="window.location.href='/dashboard/<%= threadID %>/rankup'">
 		<div class="row justify-content-between">
-			<div class="col-auto">
-				<h4>🏆 Rankup</h4>
-			</div>
+			<div class="col-auto"><h4>Rankup</h4></div>
 			<div class="col-auto">
 				<label class="switch">
 					<div class="form-check form-switch">
@@ -67,14 +59,12 @@
 				</label>
 			</div>
 		</div>
-		<p class="text-700 lead fs-1 ms-2 mb-0">Gửi tin nhắn thông báo thăng cấp!</p>
+		<p class="text-700 lead fs-1 ms-2 mb-0">Send rank-up notification messages.</p>
 	</div>
 
 	<div class="bg-300 rounded-5 py-4 px-4 mt-2" role="button" onclick="window.location.href='/dashboard/<%= threadID %>/custom-cmd'">
 		<div class="row justify-content-between">
-			<div class="col-auto">
-				<h4>⚙️ Custom command</h4>
-			</div>
+			<div class="col-auto"><h4>Custom command</h4></div>
 			<div class="col-auto">
 				<label class="switch">
 					<div class="form-check form-switch">
@@ -84,11 +74,11 @@
 				</label>
 			</div>
 		</div>
-		<p class="text-700 lead fs-1 ms-2 mb-0">Tùy chỉnh lệnh của bot!</p>
+		<p class="text-700 lead fs-1 ms-2 mb-0">Customize bot commands.</p>
 	</div>
 
 	<input type="hidden" name="threadID" value="<%= threadID %>">
-	<button type="submit" id="save" class="mt-2 btn btn-primary btn-block" <%=authConfigDashboard ? '' : 'disabled'%>>Lưu</button>
+	<button type="submit" id="save" class="mt-2 btn btn-primary btn-block" <%=authConfigDashboard ? '' : 'disabled'%>>Save</button>
 
 </form>
 
@@ -110,35 +100,33 @@
             customCommand: $("#sw-customcmd").is(":checked")
           }
         },
-        success: function(data) {
+        success: function() {
           $.createToast({
             title: "Success",
             type: "success",
-            message: "Cập nhật thành công!"
-          })
+            message: "Updated successfully"
+          });
         },
-        error: function(err) {
+        error: function() {
           $.createToast({
-            title: "Lỗi",
+            title: "Error",
             type: "error",
-            message: "Đã xảy ra lỗi!"
-          })
+            message: "An error occurred"
+          });
         }
       });
       '<% } else { %>'
-      e.preventDefault();
       $.createToast({
-        title: "Warnig",
-        message: "[!] Chỉ quản trị viên của nhóm chat hoặc những thành viên được cho phép mới có thể chỉnh sửa dashboard",
-        type: "warning",
-      })
+        title: "Warning",
+        message: "Only thread admins or members with permission can edit this dashboard",
+        type: "warning"
+      });
       '<% } %>'
     });
   })();
 
-	// kiểm tra nếu click vào input thì không chuyển trang
-	$("[type='checkbox']").on("click", function(e) {
-		e.stopPropagation();
-	});
+  $("[type='checkbox']").on("click", function(e) {
+    e.stopPropagation();
+  });
 </script>
 <%~ includeFile("partials/footer.eta") %>

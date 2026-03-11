@@ -37,12 +37,24 @@ function removeSpecialChar(inputString) { // remove char banned by facebook
 }
 
 module.exports = function (defaultFuncs, api, ctx) {
+	function normalizeAttachment(att) {
+		// Support both:
+		// 1) readable stream
+		// 2) { value: readableStream, options: { filename, contentType } }
+		if (utils.isReadableStream(att))
+			return att;
+		if (att && typeof att == "object" && utils.isReadableStream(att.value))
+			return att;
+		return null;
+	}
+
 	function uploadAttachment(attachments, callback) {
 		const uploads = [];
 
 		// create an array of promises
 		for (let i = 0; i < attachments.length; i++) {
-			if (!utils.isReadableStream(attachments[i])) {
+			const payload = normalizeAttachment(attachments[i]);
+			if (!payload) {
 				throw {
 					error:
 						"Attachment should be a readable stream and not " +
@@ -52,7 +64,7 @@ module.exports = function (defaultFuncs, api, ctx) {
 			}
 
 			const form = {
-				upload_1024: attachments[i],
+				upload_1024: payload,
 				voice_clip: "true"
 			};
 

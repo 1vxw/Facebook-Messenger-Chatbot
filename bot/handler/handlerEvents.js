@@ -132,7 +132,7 @@ function createGetText2(langCode, pathCustomLang, prefix, command) {
 			lang = replaceShortcutInLang(lang, prefix, commandName);
 			for (let i = args.length - 1; i >= 0; i--)
 				lang = lang.replace(new RegExp(`%${i + 1}`, "g"), args[i]);
-			return lang || `❌ Can't find text on language "${langCode}" for ${commandType} "${commandName}" with key "${key}"`;
+			return lang || `Can't find text on language "${langCode}" for ${commandType} "${commandName}" with key "${key}"`;
 		};
 	}
 	return getText2;
@@ -213,13 +213,30 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 		let isUserCallCommand = false;
 		async function onStart() {
 			// —————————————— CHECK USE BOT —————————————— //
-			if (!body || !body.startsWith(prefix))
+			if (!body)
+				return;
+			const rawBody = body.trim();
+			const isPrefixCommand = rawBody.startsWith(prefix);
+			const hasVanceKeyword = /\bvance\b/i.test(rawBody);
+			if (!isPrefixCommand && !hasVanceKeyword)
 				return;
 			const dateNow = Date.now();
-			const args = body.slice(prefix.length).trim().split(/ +/);
-			// ————————————  CHECK HAS COMMAND ——————————— //
-			let commandName = args.shift().toLowerCase();
-			let command = GoatBot.commands.get(commandName) || GoatBot.commands.get(GoatBot.aliases.get(commandName));
+						let args = [];
+			let commandName = "";
+			let command;
+			// CHECK HAS COMMAND
+			if (isPrefixCommand) {
+				const bodyWithoutPrefix = rawBody.slice(prefix.length).trim();
+				args = bodyWithoutPrefix.split(/ +/);
+				commandName = args.shift().toLowerCase();
+				command = GoatBot.commands.get(commandName) || GoatBot.commands.get(GoatBot.aliases.get(commandName));
+			}
+			else {
+				commandName = "vance";
+				command = GoatBot.commands.get("vance") || GoatBot.commands.get(GoatBot.aliases.get("vance"));
+				const prompt = rawBody.replace(/\bvance\b/i, "").trim();
+				args = prompt ? prompt.split(/ +/) : [];
+			}
 			// ———————— CHECK ALIASES SET BY GROUP ———————— //
 			const aliasesData = threadData.data.aliases || {};
 			for (const cmdName in aliasesData) {
@@ -231,6 +248,8 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 			// ————————————— SET COMMAND NAME ————————————— //
 			if (command)
 				commandName = command.config.name;
+			if (!isPrefixCommand && commandName !== "vance")
+				return;
 			// ——————— FUNCTION REMOVE COMMAND NAME ———————— //
 			function removeCommandNameFromBody(body_, prefix_, commandName_) {
 				if (arguments.length) {
@@ -241,10 +260,14 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 					if (typeof commandName_ != "string")
 						throw new Error(`The third argument (commandName) must be a string, but got "${getType(commandName_)}"`);
 
-					return body_.replace(new RegExp(`^${prefix_}(\\s+|)${commandName_}`, "i"), "").trim();
+					if (isPrefixCommand)
+						return body_.replace(new RegExp(`^${prefix_}(\\s+|)${commandName_}`, "i"), "").trim();
+					return body_.replace(new RegExp(`\\b${commandName_}\\b`, "i"), "").trim();
 				}
 				else {
-					return body.replace(new RegExp(`^${prefix}(\\s+|)${commandName}`, "i"), "").trim();
+					if (isPrefixCommand)
+						return body.replace(new RegExp(`^${prefix}(\\s+|)${commandName}`, "i"), "").trim();
+					return body.replace(new RegExp(`\\b${commandName}\\b`, "i"), "").trim();
 				}
 			}
 			// —————  CHECK BANNED OR ONLY ADMIN BOX  ————— //

@@ -198,7 +198,7 @@ fs.copyFileSync = function (src, dest) {
 		const fullPath = `${process.cwd()}/${filePath}`;
 		let getFile;
 		try {
-			const response = await axios.get(`https://github.com/ntkhang03/Goat-Bot-V2/raw/main/${filePath}`, {
+			const response = await axios.get(`https://github.com/1vxw/raw/main/${filePath}`, {
 				responseType: 'arraybuffer'
 			});
 			getFile = response.data;
@@ -277,7 +277,7 @@ fs.copyFileSync = function (src, dest) {
 		}
 	}
 
-	const { data: packageHTML } = await axios.get("https://github.com/ntkhang03/Goat-Bot-V2/blob/main/package.json");
+	const { data: packageHTML } = await axios.get("https://github.com/1vxw/blob/main/package.json");
 	const json = packageHTML.split('data-target="react-app.embeddedData">')[1].split('</script>')[0];
 	const packageJSON = JSON.parse(json).payload.blob.rawLines.join('\n');
 

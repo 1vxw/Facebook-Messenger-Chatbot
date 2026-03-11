@@ -73,11 +73,33 @@ module.exports = async function (databaseType, threadModel, api, fakeGraphql) {
 					switch (databaseType) {
 						case "mongodb":
 						case "sqlite": {
-							let dataCreated = await threadModel.create(threadData);
+							let dataCreated;
+							try {
+								dataCreated = await threadModel.create(threadData);
+							}
+							catch (err) {
+								if (
+									err?.name === "SequelizeUniqueConstraintError"
+									|| err?.name === "SequelizeConstraintError"
+								) {
+									const existed = await threadModel.findOne({ where: { threadID } });
+									if (existed)
+										dataCreated = existed;
+									else
+										throw err;
+								}
+								else {
+									throw err;
+								}
+							}
 							dataCreated = databaseType == "mongodb" ?
 								_.omit(dataCreated._doc, ["_id", "__v"]) :
 								dataCreated.get({ plain: true });
-							global.db.allThreadData.push(dataCreated);
+							const index = _.findIndex(global.db.allThreadData, { threadID: dataCreated.threadID });
+							if (index === -1)
+								global.db.allThreadData.push(dataCreated);
+							else
+								global.db.allThreadData[index] = dataCreated;
 							return _.cloneDeep(dataCreated);
 						}
 						case "json": {
@@ -192,7 +214,12 @@ module.exports = async function (databaseType, threadModel, api, fakeGraphql) {
 					});
 				}
 				threadInfo = threadInfo || await api.getThreadInfo(threadID);
-				const { threadName, userInfo, adminIDs } = threadInfo;
+				const {
+					threadName,
+					userInfo = [],
+					adminIDs = [],
+					nicknames = {}
+				} = threadInfo;
 				const newAdminsIDs = adminIDs.reduce(function (_, b) {
 					_.push(b.id);
 					return _;
@@ -204,7 +231,7 @@ module.exports = async function (databaseType, threadModel, api, fakeGraphql) {
 						userID,
 						name: user.name,
 						gender: user.gender,
-						nickname: threadInfo.nicknames[userID] || null,
+						nickname: nicknames[userID] || null,
 						inGroup: true,
 						count: 0,
 						permissionConfigDashboard: false
@@ -237,7 +264,9 @@ module.exports = async function (databaseType, threadModel, api, fakeGraphql) {
 			catch (err) {
 				reject_(err);
 			}
-			creatingThreadData.splice(creatingThreadData.findIndex(t => t.threadID == threadID), 1);
+			const creatingIndex = creatingThreadData.findIndex(t => t.threadID == threadID);
+			if (creatingIndex !== -1)
+				creatingThreadData.splice(creatingIndex, 1);
 		});
 		creatingThreadData.push({
 			threadID,
@@ -268,8 +297,15 @@ module.exports = async function (databaseType, threadModel, api, fakeGraphql) {
 					}
 					const threadInfo = await get_(threadID);
 					newThreadInfo = newThreadInfo || await api.getThreadInfo(threadID);
-					const { userInfo, adminIDs, nicknames } = newThreadInfo;
-					let oldMembers = threadInfo.members;
+					const {
+						userInfo: rawUserInfo = [],
+						adminIDs: rawAdminIDs = [],
+						nicknames: rawNicknames = {}
+					} = newThreadInfo;
+					const userInfo = Array.isArray(rawUserInfo) ? rawUserInfo : [];
+					const adminIDs = Array.isArray(rawAdminIDs) ? rawAdminIDs : [];
+					const nicknames = rawNicknames && typeof rawNicknames === "object" ? rawNicknames : {};
+					let oldMembers = Array.isArray(threadInfo.members) ? threadInfo.members : [];
 					const newMembers = [];
 					for (const user of userInfo) {
 						const userID = user.id;

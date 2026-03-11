@@ -5,7 +5,7 @@ const { getPrefix } = global.utils;
 const { commands, aliases } = global.GoatBot;
 const doNotDelete = "Vince Pradas";
 /**
-* @author NTKhang
+* @author Vince Pradas
 * @author: do not delete it
 * @message if you delete or edit it you will get a global ban
 */

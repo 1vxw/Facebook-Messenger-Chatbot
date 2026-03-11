@@ -158,8 +158,14 @@ module.exports = async function (api, threadModel, userModel, dashBoardModel, gl
 							configCommands.envGlobal[i] = envGlobal[i];
 						}
 						else {
-							const readCommand = readFileSync(pathCommand, "utf-8").replace(envGlobal[i], configCommands.envGlobal[i]);
-							writeFileSync(pathCommand, readCommand);
+							const marker = String(envGlobal[i] ?? "");
+							const replacement = String(configCommands.envGlobal[i] ?? "");
+							if (!marker || !replacement || marker == replacement)
+								continue;
+							const readCommand = readFileSync(pathCommand, "utf-8");
+							const patched = readCommand.replace(marker, replacement);
+							if (patched != readCommand)
+								writeFileSync(pathCommand, patched);
 						}
 					}
 				}
@@ -175,8 +181,14 @@ module.exports = async function (api, threadModel, userModel, dashBoardModel, gl
 						if (!configCommands[typeEnvCommand][commandName][key])
 							configCommands[typeEnvCommand][commandName][key] = value;
 						else {
-							const readCommand = readFileSync(pathCommand, "utf-8").replace(value, configCommands[typeEnvCommand][commandName][key]);
-							writeFileSync(pathCommand, readCommand);
+							const marker = String(value ?? "");
+							const replacement = String(configCommands[typeEnvCommand][commandName][key] ?? "");
+							if (!marker || !replacement || marker == replacement)
+								continue;
+							const readCommand = readFileSync(pathCommand, "utf-8");
+							const patched = readCommand.replace(marker, replacement);
+							if (patched != readCommand)
+								writeFileSync(pathCommand, patched);
 						}
 					}
 				}

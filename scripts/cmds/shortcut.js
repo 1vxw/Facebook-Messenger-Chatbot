@@ -5,7 +5,7 @@ module.exports = {
 		name: 'shortcut',
 		aliases: ['short'],
 		version: '1.14',
-		author: 'NTKhang',
+		author: 'Vince Pradas',
 		countDown: 5,
 		role: 0,
 		description: {

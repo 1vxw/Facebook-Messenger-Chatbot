@@ -1,0 +1,131 @@
+<%~ includeFile("partials/header.eta", { user: user }); %>
+<%~ includeFile("partials/message.eta"); %>
+<%~ includeFile("partials/title.eta", {
+	icon: "fas fa-heartbeat",
+	title: "Runtime Monitor"
+}); %>
+
+<section class="post my-4">
+  <div class="container">
+    <div class="card mb-3">
+      <div class="card-header"><h5 class="mb-0">Appstate</h5></div>
+      <div class="card-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><td>Status</td><td><%= appstate.exists ? (appstate.validJson ? "Loaded" : "Invalid JSON") : "Missing" %></td></tr>
+          <tr><td>File path</td><td><code><%= appstate.path %></code></td></tr>
+          <tr><td>Cookie count</td><td><%= appstate.cookieCount %></td></tr>
+          <tr><td>Has c_user</td><td><%= appstate.hasCUser ? "Yes" : "No" %></td></tr>
+          <tr><td>Has xs</td><td><%= appstate.hasXs ? "Yes" : "No" %></td></tr>
+          <tr><td>Expiring within 24h</td><td><%= appstate.expiresSoonCount %></td></tr>
+          <tr><td>Nearest expiry</td><td><%= appstate.expiresAt || "Unknown" %></td></tr>
+          <tr><td>Expires in (hours)</td><td><%= appstate.expiresInHours ?? "Unknown" %></td></tr>
+          <tr><td>Auto refresh fbstate</td><td><%= autoRefreshFbstate ? "Enabled" : "Disabled" %></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><h5 class="mb-0">Gemini API</h5></div>
+      <div class="card-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><td>Configured</td><td><%= gemini.configured ? "Yes" : "No" %></td></tr>
+          <tr><td>Key (masked)</td><td><%= gemini.maskedKey || "-" %></td></tr>
+          <tr><td>Connectivity check</td><td><%= gemini.check %></td></tr>
+          <tr><td>Error</td><td><%= gemini.error || "-" %></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><h5 class="mb-0">Secrets Management</h5></div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label for="appstateInput" class="form-label">AppState JSON</label>
+          <textarea id="appstateInput" class="form-control" rows="6" placeholder="Paste AppState JSON array here"></textarea>
+        </div>
+        <div class="mb-3">
+          <label for="geminiKeyInput" class="form-label">Gemini API Key</label>
+          <input id="geminiKeyInput" class="form-control" type="text" placeholder="Paste Gemini key here">
+        </div>
+        <button id="saveSecretsBtn" class="btn btn-phoenix-primary">Save Secrets</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h5 class="mb-0">Server Control</h5></div>
+      <div class="card-body pb-0">
+        <div class="small text-muted mb-2">Bot status: <strong><%= botStarted ? "running" : (botStartInProgress ? "starting" : "stopped") %></strong></div>
+      </div>
+      <div class="card-body d-flex gap-2">
+        <button id="startBtn" class="btn btn-success">Start Bot</button>
+        <button id="restartBtn" class="btn btn-warning">Restart Server</button>
+        <button id="stopBtn" class="btn btn-danger">Stop Server</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  $(function() {
+    $("#saveSecretsBtn").on("click", function() {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+
+      $.ajax({
+        url: "/admin/system/secrets",
+        method: "POST",
+        data: {
+          appstate: $("#appstateInput").val(),
+          geminiKey: $("#geminiKeyInput").val()
+        },
+        success: function(data) {
+          $.createToast({ type: "success", title: "Saved", message: data.message || "Secrets saved" });
+          setTimeout(() => location.reload(), 800);
+        },
+        error: function(err) {
+          $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to save secrets" });
+        },
+        complete: function() {
+          btn.disabled = false;
+          btn.textContent = "Save Secrets";
+        }
+      });
+    });
+
+    $("#restartBtn").on("click", function() {
+      if (!confirm("Restart server now?")) return;
+      $.post("/admin/system/restart", function() {
+        $.createToast({ type: "success", title: "Restart", message: "Restart signal sent" });
+      }).fail(function(err) {
+        $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to restart" });
+      });
+    });
+
+    $("#startBtn").on("click", function() {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = "Starting...";
+      $.post("/admin/system/start", function(data) {
+        $.createToast({ type: "success", title: "Start", message: data.message || "Bot start triggered" });
+        setTimeout(() => location.reload(), 1000);
+      }).fail(function(err) {
+        $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to start bot" });
+      }).always(function() {
+        btn.disabled = false;
+        btn.textContent = "Start Bot";
+      });
+    });
+
+    $("#stopBtn").on("click", function() {
+      if (!confirm("Stop server now?")) return;
+      $.post("/admin/system/stop", function() {
+        $.createToast({ type: "warning", title: "Stop", message: "Stop signal sent" });
+      }).fail(function(err) {
+        $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to stop" });
+      });
+    });
+  });
+</script>
+
+<%~ includeFile("partials/footer.eta") %>

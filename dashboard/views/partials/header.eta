@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html data-bs-theme="dark" lang="vi">
+<html data-bs-theme="dark" lang="en">
 <head>
 	<meta charset="UTF-8">
 	<meta content="width=device-width, initial-scale=1" name="viewport" />
@@ -11,7 +11,7 @@
 	<link rel="stylesheet" href="/css/dropzone.css">
 	<link rel="stylesheet" href="/css/custom.css">
 
-	<title>Goat Bot</title>
+	<title>VXW Dashboard</title>
 	<link rel="icon" href="/images/logo.png" type="image/icon type">
 	
 	<!-- <script src="/js/bootstrap.min.js"></script> -->
@@ -34,7 +34,6 @@
 		}); %>
 	</header>
 
-	<script src="https://www.google.com/recaptcha/api.js" async defer></script>
 	<!-- <script src="/js/hwt.js"></script> -->
 	<script src="/js/toast.js"></script>
 

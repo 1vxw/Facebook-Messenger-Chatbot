@@ -3,7 +3,7 @@ const expres = require("express");
 const router = expres.Router();
 
 module.exports = function ({
-	unAuthenticated, isWaitVerifyAccount, isVerifyRecaptcha,
+	unAuthenticated, isWaitVerifyAccount,
 	validateEmail, randomNumberApikey, transporter,
 	generateEmailVerificationCode, dashBoardData, expireVerifyCode
 }) {
@@ -19,25 +19,20 @@ module.exports = function ({
 		})
 
 		.post("/", unAuthenticated, async (req, res) => {
-			if (!await isVerifyRecaptcha(req.body["g-recaptcha-response"]))
-				return res.status(400).send({
-					status: "error",
-					message: "Captcha không hợp lệ"
-				});
 			const { name, email, password, password_confirmation } = req.body;
 			const errors = [];
 			if (!name || !email || !password || !password_confirmation)
-				errors.push({ msg: "Bạn chưa điền đủ thông tin" });
+				errors.push({ msg: "Please fill in all required fields" });
 			if (!validateEmail(email))
-				errors.push({ msg: "Địa chỉ email không hợp lệ" });
+				errors.push({ msg: "Email address is invalid" });
 			if (email.length > 100 || email.length < 5)
-				errors.push({ msg: "Địa chỉ email phải có độ dài từ 5 đến 100 ký tự" });
+				errors.push({ msg: "Email length must be between 5 and 100 characters" });
 			if (await dashBoardData.get(email))
-				errors.push({ msg: `Địa chỉ email ${email} đã được sử dụng` });
+				errors.push({ msg: `Email ${email} is already in use` });
 			if (password !== password_confirmation)
-				errors.push({ msg: "Mật khẩu không khớp" });
+				errors.push({ msg: "Passwords do not match" });
 			if (password.length < 6)
-				errors.push({ msg: "Mật khẩu phải có ít nhất 6 ký tự" });
+				errors.push({ msg: "Password must be at least 6 characters" });
 			if (errors.length > 0) {
 				return res.status(400).send({
 					status: "error",
@@ -47,13 +42,12 @@ module.exports = function ({
 
 			const code = randomNumberApikey(6);
 			await transporter.sendMail({
-				from: "Goat-Bot",
+				from: "VXW",
 				to: email,
 				subject: "Verify your account",
 				html: generateEmailVerificationCode(code)
 			});
 
-			// if you want better security, you can use hash password before saving to database
 			const hashPassword = bcrypt.hashSync(password, 10);
 			const user = {
 				email,
@@ -70,12 +64,12 @@ module.exports = function ({
 		.post("/resend-code", [unAuthenticated, isWaitVerifyAccount], async (req, res) => {
 			const email = req.body.email;
 			if (!validateEmail(email)) {
-				req.flash("errors", { msg: "Địa chỉ email không hợp lệ" });
-				return res.status(400).send({ status: "error", message: "Địa chỉ email không hợp lệ" });
+				req.flash("errors", { msg: "Email address is invalid" });
+				return res.status(400).send({ status: "error", message: "Email address is invalid" });
 			}
 
-			if (dashBoardData.get(email)) {
-				req.flash("errors", { msg: "Địa chỉ email này đã được sử dụng" });
+			if (await dashBoardData.get(email)) {
+				req.flash("errors", { msg: "This email is already in use" });
 				return res.redirect("/register/resend-code");
 			}
 
@@ -84,14 +78,14 @@ module.exports = function ({
 
 			try {
 				await transporter.sendMail({
-					from: "Goat-Bot",
+					from: "VXW",
 					to: email,
 					subject: "Verify your account",
 					html: generateEmailVerificationCode(code)
 				});
 			}
 			catch (err) {
-				req.flash("errors", { msg: "Có lỗi xảy ra, vui lòng thử lại sau" });
+				req.flash("errors", { msg: "An error occurred, please try again later" });
 				return res.redirect("/register/resend-code");
 			}
 
@@ -104,7 +98,7 @@ module.exports = function ({
 			if (!waitVerifyAccount)
 				return res.redirect("/register");
 			if (code !== waitVerifyAccount.code) {
-				req.flash("errors", { msg: "Code is not correct" });
+				req.flash("errors", { msg: "Verification code is not correct" });
 				return res.redirect("/register/submit-code");
 			}
 			delete waitVerifyAccount.code;
@@ -116,7 +110,7 @@ module.exports = function ({
 					return next(err);
 				}
 				delete req.session.redirectTo;
-				req.flash("success", { msg: "Bạn đã đăng ký thành công" });
+				req.flash("success", { msg: "Registration successful" });
 				res.redirect(redirectLink);
 			});
 		});

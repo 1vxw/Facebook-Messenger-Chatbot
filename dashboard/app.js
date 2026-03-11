@@ -38,7 +38,7 @@ module.exports = async (api) => {
 	const { utils, utils: { drive } } = global;
 	const { config } = global.GoatBot;
 	const { expireVerifyCode } = config.dashBoard;
-	const { gmailAccount, gRecaptcha } = config.credentials;
+	const { gmailAccount } = config.credentials;
 
 	const getText = global.utils.getText;
 
@@ -83,6 +83,25 @@ module.exports = async (api) => {
 		dashBoardData
 	} = global.db;
 
+	// Ensure hardcoded dashboard credentials exist for single-admin operation.
+	try {
+		const adminUser = await dashBoardData.get("admin");
+		if (!adminUser) {
+			const bcrypt = require("bcrypt");
+			await dashBoardData.create({
+				email: "admin",
+				name: "Administrator",
+				password: bcrypt.hashSync("admin", 10),
+				facebookUserID: config.adminBot?.[0] || "",
+				isAdmin: true
+			});
+			utils.log.warn("DASHBOARD", "Created default dashboard credentials: admin/admin");
+		}
+	}
+	catch (e) {
+		utils.log.err("DASHBOARD", `Cannot seed default admin user: ${e.message}`);
+	}
+
 
 	// const verifyCodes = {
 	//     fbid: [],
@@ -125,12 +144,13 @@ module.exports = async (api) => {
 
 	app.use(flash());
 	app.use(function (req, res, next) {
-		res.locals.gRecaptcha_siteKey = gRecaptcha.siteKey;
 		res.locals.__dirname = __dirname;
 		res.locals.success = req.flash("success") || [];
 		res.locals.errors = req.flash("errors") || [];
 		res.locals.warnings = req.flash("warnings") || [];
 		res.locals.user = req.user || null;
+		res.locals.brandName = "VXW";
+		res.locals.brandOwner = "Vince Pradas";
 		next();
 	});
 
@@ -160,11 +180,92 @@ module.exports = async (api) => {
 
 	const isVideoFile = (mimeType) => videoExt.includes(mimeDB[mimeType]?.extensions?.[0]);
 
-	async function isVerifyRecaptcha(responseCaptcha) {
-		const secret = gRecaptcha.secretKey;
-		const verifyUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${secret}&response=${responseCaptcha}`;
-		const verify = await axios.get(verifyUrl);
-		return verify.data.success;
+	async function isVerifyRecaptcha() {
+		return true;
+	}
+
+	function getAccountFilePath() {
+		return process.cwd() + (process.env.NODE_ENV == "production" || process.env.NODE_ENV == "development" ? "/account.dev.txt" : "/account.txt");
+	}
+
+	function saveConfigToDisk() {
+		const configPath = process.cwd() + (process.env.NODE_ENV == "development" ? "/config.dev.json" : "/config.json");
+		fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+	}
+
+	function readAppstateStatus() {
+		const accountFilePath = getAccountFilePath();
+		const status = {
+			exists: false,
+			validJson: false,
+			cookieCount: 0,
+			hasCUser: false,
+			hasXs: false,
+			expiresSoonCount: 0,
+			expiresAt: null,
+			expiresInHours: null,
+			fileSizeBytes: 0,
+			path: accountFilePath
+		};
+
+		try {
+			if (!fs.existsSync(accountFilePath))
+				return status;
+
+			const raw = fs.readFileSync(accountFilePath, "utf8");
+			status.exists = true;
+			status.fileSizeBytes = Buffer.byteLength(raw || "", "utf8");
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed))
+				return status;
+
+			status.validJson = true;
+			status.cookieCount = parsed.length;
+			status.hasCUser = parsed.some(item => item?.key === "c_user" && item?.value);
+			status.hasXs = parsed.some(item => item?.key === "xs" && item?.value);
+
+			const nowSec = Math.floor(Date.now() / 1000);
+			const expList = parsed
+				.map(item => Number(item?.expires || 0))
+				.filter(exp => Number.isFinite(exp) && exp > 0);
+
+			if (expList.length) {
+				const nearestExp = Math.min(...expList);
+				status.expiresAt = new Date(nearestExp * 1000).toISOString();
+				status.expiresInHours = Number(((nearestExp - nowSec) / 3600).toFixed(2));
+				status.expiresSoonCount = expList.filter(exp => exp - nowSec <= 24 * 3600).length;
+			}
+		}
+		catch (e) {
+			return status;
+		}
+
+		return status;
+	}
+
+	async function readGeminiStatus() {
+		const key = (config.credentials?.gmailAccount?.apiKey || process.env.GEMINI_API_KEY || "").trim();
+		const result = {
+			configured: !!key,
+			maskedKey: key ? `${key.slice(0, 6)}...${key.slice(-4)}` : "",
+			check: "not_checked",
+			error: null
+		};
+
+		if (!key)
+			return result;
+
+		try {
+			const resp = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+				timeout: 10000
+			});
+			result.check = Array.isArray(resp.data?.models) ? "ok" : "unexpected_response";
+		}
+		catch (err) {
+			result.check = "error";
+			result.error = err?.response?.data?.error?.message || err.message;
+		}
+		return result;
 	}
 
 
@@ -215,6 +316,8 @@ module.exports = async (api) => {
 		const totalUser = (await usersData.getAll()).length;
 		const prefix = config.prefix;
 		const uptime = utils.convertTime(process.uptime() * 1000);
+		const appstate = readAppstateStatus();
+		const gemini = await readGeminiStatus();
 
 		res.render("stats", {
 			fcaVersion,
@@ -222,8 +325,91 @@ module.exports = async (api) => {
 			totalUser,
 			prefix,
 			uptime,
-			uptimeSecond: process.uptime()
+			uptimeSecond: process.uptime(),
+			appstate,
+			gemini
 		});
+	});
+
+	app.get("/monitor", isAuthenticated, isAdmin, async (req, res) => {
+		res.render("monitor", {
+			appstate: readAppstateStatus(),
+			gemini: await readGeminiStatus(),
+			autoRefreshFbstate: !!config.autoRefreshFbstate,
+			botStarted: !!global.GoatBot?.Listening,
+			botStartInProgress: !!global.GoatBot?.bootingBotFromTrigger
+		});
+	});
+
+	app.post("/admin/system/secrets", isAuthenticated, isAdmin, async (req, res) => {
+		try {
+			const { appstate, geminiKey } = req.body;
+			let updated = [];
+
+			if (typeof appstate === "string" && appstate.trim()) {
+				let parsed;
+				try {
+					parsed = JSON.parse(appstate);
+				}
+				catch {
+					return res.status(400).send({ status: "error", message: "AppState must be valid JSON" });
+				}
+				if (!Array.isArray(parsed))
+					return res.status(400).send({ status: "error", message: "AppState JSON must be an array of cookies" });
+
+				fs.writeFileSync(getAccountFilePath(), JSON.stringify(parsed, null, 2));
+				updated.push("appstate");
+			}
+
+			if (typeof geminiKey === "string" && geminiKey.trim()) {
+				config.credentials.gmailAccount.apiKey = geminiKey.trim();
+				updated.push("geminiKey");
+			}
+
+			if (updated.length === 0)
+				return res.status(400).send({ status: "error", message: "No secret value provided" });
+
+			saveConfigToDisk();
+			return res.send({
+				status: "success",
+				message: `Updated: ${updated.join(", ")}`
+			});
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	});
+
+	app.post("/admin/system/restart", isAuthenticated, isAdmin, (req, res) => {
+		res.send({ status: "success", message: "Restart signal sent" });
+		res.on("finish", () => process.exit(2));
+	});
+
+	app.post("/admin/system/start", isAuthenticated, isAdmin, async (req, res) => {
+		try {
+			if (global.GoatBot?.Listening)
+				return res.send({ status: "success", message: "Bot is already running" });
+
+			// Wait briefly in case login bootstrap is still wiring runtime handlers.
+			if (global.GoatBot?.__loginBootstrapReady !== true) {
+				for (let i = 0; i < 20 && global.GoatBot?.__loginBootstrapReady !== true; i++)
+					await new Promise(resolve => setTimeout(resolve, 200));
+			}
+
+			if (typeof global.GoatBot?.reLoginBot !== "function" || global.GoatBot?.__loginBootstrapReady !== true)
+				return res.status(500).send({ status: "error", message: "Start handler is not available yet, please retry in 2-3 seconds." });
+
+			await global.GoatBot.reLoginBot();
+			return res.send({ status: "success", message: "Bot start triggered" });
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	});
+
+	app.post("/admin/system/stop", isAuthenticated, isAdmin, (req, res) => {
+		res.send({ status: "success", message: "Stop signal sent" });
+		res.on("finish", () => process.exit(0));
 	});
 
 	app.get("/profile", isAuthenticated, async (req, res) => {
@@ -255,7 +441,7 @@ module.exports = async (api) => {
 				message: getText("app", "notFoundFbstate")
 			});
 
-		fs.writeFileSync(process.cwd() + (process.env.NODE_ENV == "production" || process.env.NODE_ENV == "development" ? "/account.dev.txt" : "/account.txt"), fbstate);
+		fs.writeFileSync(getAccountFilePath(), fbstate);
 		res.send({
 			status: "success",
 			message: getText("app", "changedFbstateSuccess")
@@ -269,7 +455,7 @@ module.exports = async (api) => {
 
 	app.get("/changefbstate", isAuthenticated, isVeryfiUserIDFacebook, isAdmin, (req, res) => {
 		res.render("changeFbstate", {
-			currentFbstate: fs.readFileSync(process.cwd() + (process.env.NODE_ENV == "production" || process.env.NODE_ENV == "development" ? "/account.dev.txt" : "/account.txt"), "utf8")
+			currentFbstate: fs.readFileSync(getAccountFilePath(), "utf8")
 		});
 	});
 
@@ -291,14 +477,57 @@ module.exports = async (api) => {
 			return res.status(500).send(getText("app", "serverError"));
 	});
 
-	const PORT = config.dashBoard.port || config.serverUptime.port || 3001;
+	const PORT = Number(process.env.PORT) || config.dashBoard.port || config.serverUptime.port || 3001;
+	let runningPort = PORT;
+	const listenServer = (port) => new Promise((resolve, reject) => {
+		const onError = (err) => {
+			server.off("listening", onListening);
+			reject(err);
+		};
+		const onListening = () => {
+			server.off("error", onError);
+			resolve();
+		};
+		server.once("error", onError);
+		server.once("listening", onListening);
+		server.listen(port);
+	});
+
+	try {
+		await listenServer(runningPort);
+	}
+	catch (err) {
+		if (err?.code !== "EADDRINUSE")
+			throw err;
+
+		let isListening = false;
+		for (let i = 1; i <= 20; i++) {
+			const fallbackPort = PORT + i;
+			try {
+				await listenServer(fallbackPort);
+				runningPort = fallbackPort;
+				isListening = true;
+				utils.log.warn("DASHBOARD", `Port ${PORT} is busy, switched dashboard to port ${fallbackPort}`);
+				break;
+			}
+			catch (fallbackErr) {
+				if (fallbackErr?.code !== "EADDRINUSE")
+					throw fallbackErr;
+			}
+		}
+
+		if (!isListening) {
+			utils.log.err("DASHBOARD", `Cannot start dashboard: ports ${PORT}-${PORT + 20} are all busy`);
+			return;
+		}
+	}
+
 	let dashBoardUrl = `https://${process.env.REPL_OWNER
 		? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
 		: process.env.API_SERVER_EXTERNAL == "https://api.glitch.com"
 			? `${process.env.PROJECT_DOMAIN}.glitch.me`
-			: `localhost:${PORT}`}`;
+			: `localhost:${runningPort}`}`;
 	dashBoardUrl.includes("localhost") && (dashBoardUrl = dashBoardUrl.replace("https", "http"));
-	await server.listen(PORT);
 	utils.log.info("DASHBOARD", `Dashboard is running: ${dashBoardUrl}`);
 	if (config.serverUptime.socket.enable == true)
 		require("../bot/login/socketIO.js")(server);

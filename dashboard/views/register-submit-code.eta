@@ -7,8 +7,6 @@
 	title: "Verify Your Account"
 }); %>
 
-<!--posts-->
-<!-- form verify code -->
 <section class="post my-4">
   <div class="container">
     <div class="row">
@@ -24,18 +22,14 @@
                 <input type="text" class="form-control" id="code" name="code" placeholder="Enter code">
               </div>
               <div class="alert alert-info mt-3">
-                <p>
-                  <i class="fas fa-info-circle"></i> Nhập mã xác thực đã được gửi về email của
-                  bạn.
-                </p>
+                <p><i class="fas fa-info-circle"></i> Enter the verification code sent to your email.</p>
               </div>
 
               <div class="form-group">
-								<div class="justify-content-center d-flex flex-column align-items-center">
-									<button type="submit" class="btn btn-primary btn-block mt-2" id="submit-code">
-										<i class="fas fa-check"></i> Verify Code</button>
-										<a href="/register/resend-code" class="btn btn-link mt-2">Can't get code?</a>
-								</div>
+                <div class="justify-content-center d-flex flex-column align-items-center">
+                  <button type="submit" class="btn btn-primary btn-block mt-2" id="submit-code"><i class="fas fa-check"></i> Verify Code</button>
+                  <a href="/register/resend-code" class="btn btn-link mt-2">Can't get code?</a>
+                </div>
               </div>
             </div>
           </form>
@@ -45,16 +39,4 @@
   </div>
 </section>
 
-<script type="text/javascript">
-  (function() {
-    $("#code").on("'keypress keyup keydown", function() {
-      if ($("#code").val().length === 6)
-        $("#verify").removeAttr("disabled");
-      else
-        $("#verify").attr("disabled", "disabled");
-    });
-  })();
-</script>
-
-<!--footer section-->
 <%~ includeFile("partials/footer.eta") %>
