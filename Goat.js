@@ -7,7 +7,6 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const google = require("googleapis").google;
 const nodemailer = require("nodemailer");
-const { execSync } = require('child_process');
 const log = require('./logger/log.js');
 const path = require("path");
 
@@ -17,14 +16,16 @@ function validJSON(pathDir) {
 	try {
 		if (!fs.existsSync(pathDir))
 			throw new Error(`File "${pathDir}" not found`);
-		execSync(`npx jsonlint "${pathDir}"`, { stdio: 'pipe' });
+		JSON.parse(fs.readFileSync(pathDir, "utf8"));
 		return true;
 	}
 	catch (err) {
-		let msgError = err.message;
-		msgError = msgError.split("\n").slice(1).join("\n");
-		const indexPos = msgError.indexOf("    at");
-		msgError = msgError.slice(0, indexPos != -1 ? indexPos - 1 : msgError.length);
+		let msgError = err.message || "Invalid JSON";
+		if (typeof msgError === "string") {
+			const indexPos = msgError.indexOf(" at position ");
+			if (indexPos !== -1)
+				msgError = msgError.slice(0, indexPos);
+		}
 		throw new Error(msgError);
 	}
 }
