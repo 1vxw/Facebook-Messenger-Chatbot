@@ -45,7 +45,7 @@
         </tr>
         <tr class="text-start">
           <td><i class="fas fa-cookie-bite"></i> Appstate</td>
-          <td><%= appstate.exists && appstate.validJson ? "Loaded" : "Invalid or missing" %></td>
+          <td><%= appstate.exists && appstate.validJson ? `Loaded (${appstate.usability})` : "Invalid or missing" %></td>
         </tr>
         <tr class="text-start">
           <td><i class="fas fa-key"></i> Gemini key</td>

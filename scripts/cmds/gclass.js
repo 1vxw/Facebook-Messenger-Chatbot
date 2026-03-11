@@ -249,12 +249,12 @@ function normalizeModelName(modelName) {
 async function resolveClassroomModel(apiKey, preferredModel) {
 	if (!global.temp.classroomModelCache)
 		global.temp.classroomModelCache = {};
-	const preferred = normalizeModelName(preferredModel) || "gemini-2.0-flash";
+	const preferred = normalizeModelName(preferredModel) || "gemini-1.5-flash";
 	const cacheKey = `${apiKey}:${preferred}`;
 	if (global.temp.classroomModelCache[cacheKey])
 		return global.temp.classroomModelCache[cacheKey];
 
-	const fallbackList = [preferred, "gemini-2.0-flash", "gemini-1.5-flash"].filter(Boolean);
+	const fallbackList = [preferred, "gemini-1.5-flash", "gemini-1.5-pro"].filter(Boolean);
 	try {
 		const { data } = await axios.get(`${GEMINI_API_BASE}/models?key=${encodeURIComponent(apiKey)}`, { timeout: 15000 });
 		const models = Array.isArray(data?.models) ? data.models : [];
@@ -944,7 +944,7 @@ module.exports = {
 		},
 		envConfig: {
 			geminiApiKey: "",
-			geminiModel: "gemini-2.0-flash"
+			geminiModel: "gemini-1.5-flash"
 		}
 	},
 	langs: {
@@ -1186,7 +1186,7 @@ module.exports = {
 				try {
 					const cfg = envCommands?.[Reply.commandName] || {};
 					const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-					const model = cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-2.0-flash";
+					const model = cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-1.5-flash";
 					shortText = apiKey
 						? await summarizeTaskAboutWithGemini({ apiKey, model, task, index: infoIndex })
 						: summarizeTaskAboutFallback(task, infoIndex);
@@ -1253,7 +1253,7 @@ module.exports = {
 						catch (_e) {}
 						draft = await createDraftAttachmentForTask(senderID, task, {
 							apiKey: cfg.geminiApiKey || process.env.GEMINI_API_KEY || "",
-							model: cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-2.0-flash"
+							model: cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-1.5-flash"
 						}, fullName);
 					}
 				catch (err) {

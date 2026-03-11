@@ -12,10 +12,15 @@
       <div class="card-body">
         <table class="table table-sm table-borderless mb-0">
           <tr><td>Status</td><td><%= appstate.exists ? (appstate.validJson ? "Loaded" : "Invalid JSON") : "Missing" %></td></tr>
+          <tr><td>Usability</td><td><%= appstate.usability %></td></tr>
+          <tr><td>Live check</td><td><%= appstate.liveCheck %></td></tr>
+          <tr><td>Usable now</td><td><%= appstate.isUsable ? "Yes" : "No" %></td></tr>
           <tr><td>File path</td><td><code><%= appstate.path %></code></td></tr>
           <tr><td>Cookie count</td><td><%= appstate.cookieCount %></td></tr>
           <tr><td>Has c_user</td><td><%= appstate.hasCUser ? "Yes" : "No" %></td></tr>
           <tr><td>Has xs</td><td><%= appstate.hasXs ? "Yes" : "No" %></td></tr>
+          <tr><td>Missing required</td><td><%= appstate.missingRequiredCookies?.length ? appstate.missingRequiredCookies.join(", ") : "-" %></td></tr>
+          <tr><td>Expired cookies</td><td><%= appstate.expiredCookieCount %></td></tr>
           <tr><td>Expiring within 24h</td><td><%= appstate.expiresSoonCount %></td></tr>
           <tr><td>Nearest expiry</td><td><%= appstate.expiresAt || "Unknown" %></td></tr>
           <tr><td>Expires in (hours)</td><td><%= appstate.expiresInHours ?? "Unknown" %></td></tr>
@@ -51,6 +56,13 @@
       </div>
     </div>
 
+    <div class="card mb-3">
+      <div class="card-header"><h5 class="mb-0">Realtime Logs (last 15 lines)</h5></div>
+      <div class="card-body">
+        <pre id="runtimeLogs" class="mb-0 p-3 rounded" style="background:#0f172a;color:#e2e8f0;min-height:220px;max-height:320px;overflow:auto;"><%= (runtimeLogs || []).map(line => `[${line.ts}] [${line.level}] ${line.text}`).join("\n") %></pre>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header"><h5 class="mb-0">Server Control</h5></div>
       <div class="card-body pb-0">
@@ -67,6 +79,34 @@
 
 <script>
   $(function() {
+    const maxLogLines = 15;
+    const runtimeLogsEl = document.getElementById("runtimeLogs");
+    const renderRuntimeLog = (line) => {
+      if (!runtimeLogsEl || !line) return;
+      const existing = runtimeLogsEl.textContent ? runtimeLogsEl.textContent.split("\n").filter(Boolean) : [];
+      existing.push(`[${line.ts}] [${line.level}] ${line.text}`);
+      while (existing.length > maxLogLines) existing.shift();
+      runtimeLogsEl.textContent = existing.join("\n");
+      runtimeLogsEl.scrollTop = runtimeLogsEl.scrollHeight;
+    };
+
+    $.get("/admin/system/logs", function(data) {
+      const lines = Array.isArray(data?.lines) ? data.lines : [];
+      runtimeLogsEl.textContent = lines.map(line => `[${line.ts}] [${line.level}] ${line.text}`).join("\n");
+      runtimeLogsEl.scrollTop = runtimeLogsEl.scrollHeight;
+    });
+
+    const logEventSource = new EventSource("/admin/system/logs/stream");
+    logEventSource.onmessage = function(event) {
+      try {
+        renderRuntimeLog(JSON.parse(event.data));
+      }
+      catch (_e) {}
+    };
+    logEventSource.onerror = function() {
+      // Browser will auto-reconnect SSE.
+    };
+
     $("#saveSecretsBtn").on("click", function() {
       const btn = this;
       btn.disabled = true;

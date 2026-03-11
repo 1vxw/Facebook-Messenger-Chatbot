@@ -15,6 +15,7 @@ const bcrypt = require("bcrypt");
 const axios = require("axios");
 const mimeDB = require("mime-db");
 const http = require("http");
+const checkLiveCookie = require("../bot/login/checkLiveCookie.js");
 const server = http.createServer(app);
 
 const imageExt = ["png", "gif", "webp", "jpeg", "jpg"];
@@ -41,6 +42,76 @@ module.exports = async (api) => {
 	const { gmailAccount } = config.credentials;
 
 	const getText = global.utils.getText;
+	const stripAnsi = (value) => String(value ?? "").replace(/\u001b\[[0-9;]*m/g, "");
+
+	const runtimeLogState = global.GoatBot.dashboardRuntimeLogs || {
+		lines: [],
+		clients: new Set(),
+		maxLines: 15,
+		maxLineLength: 350
+	};
+	global.GoatBot.dashboardRuntimeLogs = runtimeLogState;
+
+	const pushRuntimeLog = (entry) => {
+		const text = stripAnsi(entry?.text || "").replace(/\s+/g, " ").trim();
+		if (!text)
+			return;
+
+		const line = {
+			ts: new Date().toISOString(),
+			level: entry?.level || "info",
+			text: text.length > runtimeLogState.maxLineLength ? `${text.slice(0, runtimeLogState.maxLineLength)}...` : text
+		};
+
+		runtimeLogState.lines.push(line);
+		while (runtimeLogState.lines.length > runtimeLogState.maxLines)
+			runtimeLogState.lines.shift();
+
+		for (const client of runtimeLogState.clients) {
+			try {
+				client.write(`data: ${JSON.stringify(line)}\n\n`);
+			}
+			catch (_e) {
+				runtimeLogState.clients.delete(client);
+			}
+		}
+	};
+
+	if (utils?.log && !utils.log.__dashboardWrapped) {
+		const methodToLevel = {
+			err: "error",
+			error: "error",
+			warn: "warn",
+			info: "info",
+			success: "success",
+			succes: "success",
+			master: "info",
+			dev: "debug"
+		};
+		for (const [method, level] of Object.entries(methodToLevel)) {
+			if (typeof utils.log[method] !== "function")
+				continue;
+			const original = utils.log[method].bind(utils.log);
+			utils.log[method] = function (...args) {
+				const rendered = args.map(arg => {
+					if (arg instanceof Error)
+						return arg.stack || arg.message;
+					if (typeof arg === "object") {
+						try {
+							return JSON.stringify(arg);
+						}
+						catch (_e) {
+							return String(arg);
+						}
+					}
+					return String(arg);
+				}).join(" ");
+				pushRuntimeLog({ level, text: rendered });
+				return original(...args);
+			};
+		}
+		utils.log.__dashboardWrapped = true;
+	}
 
 	const {
 		email,
@@ -193,7 +264,37 @@ module.exports = async (api) => {
 		fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 	}
 
-	function readAppstateStatus() {
+	const appstateLiveCheckCache = global.GoatBot.appstateLiveCheckCache || {
+		fingerprint: "",
+		checkedAt: 0,
+		result: "not_checked"
+	};
+	global.GoatBot.appstateLiveCheckCache = appstateLiveCheckCache;
+
+	function normalizeCookie(item) {
+		const key = String(item?.key || item?.name || "").trim();
+		const value = String(item?.value || "").trim();
+		const expiresRaw = item?.expires;
+		let expiresAtSec = null;
+
+		if (Number.isFinite(Number(expiresRaw))) {
+			let n = Number(expiresRaw);
+			if (n > 0) {
+				if (n > 1e12)
+					n = Math.floor(n / 1000);
+				expiresAtSec = Math.floor(n);
+			}
+		}
+		else if (typeof expiresRaw === "string" && expiresRaw.trim()) {
+			const parsedTime = Date.parse(expiresRaw);
+			if (!Number.isNaN(parsedTime))
+				expiresAtSec = Math.floor(parsedTime / 1000);
+		}
+
+		return { key, value, expiresAtSec };
+	}
+
+	async function readAppstateStatus({ liveCheck = false } = {}) {
 		const accountFilePath = getAccountFilePath();
 		const status = {
 			exists: false,
@@ -204,29 +305,41 @@ module.exports = async (api) => {
 			expiresSoonCount: 0,
 			expiresAt: null,
 			expiresInHours: null,
+			expiredCookieCount: 0,
+			missingRequiredCookies: [],
+			liveCheck: "not_checked",
+			usability: "unknown",
+			isUsable: false,
 			fileSizeBytes: 0,
 			path: accountFilePath
 		};
 
 		try {
-			if (!fs.existsSync(accountFilePath))
+			if (!fs.existsSync(accountFilePath)) {
+				status.usability = "missing";
 				return status;
+			}
 
 			const raw = fs.readFileSync(accountFilePath, "utf8");
 			status.exists = true;
 			status.fileSizeBytes = Buffer.byteLength(raw || "", "utf8");
+			const stat = fs.statSync(accountFilePath);
 			const parsed = JSON.parse(raw);
-			if (!Array.isArray(parsed))
+			if (!Array.isArray(parsed)) {
+				status.usability = "invalid_json";
 				return status;
+			}
 
 			status.validJson = true;
 			status.cookieCount = parsed.length;
-			status.hasCUser = parsed.some(item => item?.key === "c_user" && item?.value);
-			status.hasXs = parsed.some(item => item?.key === "xs" && item?.value);
+			const cookies = parsed.map(normalizeCookie).filter(item => item.key && item.value);
+			status.hasCUser = cookies.some(item => item.key === "c_user");
+			status.hasXs = cookies.some(item => item.key === "xs");
+			status.missingRequiredCookies = ["c_user", "xs"].filter(k => !cookies.some(item => item.key === k));
 
 			const nowSec = Math.floor(Date.now() / 1000);
-			const expList = parsed
-				.map(item => Number(item?.expires || 0))
+			const expList = cookies
+				.map(item => Number(item.expiresAtSec || 0))
 				.filter(exp => Number.isFinite(exp) && exp > 0);
 
 			if (expList.length) {
@@ -234,7 +347,40 @@ module.exports = async (api) => {
 				status.expiresAt = new Date(nearestExp * 1000).toISOString();
 				status.expiresInHours = Number(((nearestExp - nowSec) / 3600).toFixed(2));
 				status.expiresSoonCount = expList.filter(exp => exp - nowSec <= 24 * 3600).length;
+				status.expiredCookieCount = expList.filter(exp => exp <= nowSec).length;
 			}
+
+			const requiredCookies = cookies.filter(item => item.key === "c_user" || item.key === "xs");
+			const hasExpiredRequiredCookie = requiredCookies.some(item => Number.isFinite(item.expiresAtSec) && item.expiresAtSec <= nowSec);
+
+			if (status.missingRequiredCookies.length) {
+				status.usability = "missing_required_cookie";
+				status.liveCheck = "skipped";
+			}
+			else if (hasExpiredRequiredCookie) {
+				status.usability = "expired_required_cookie";
+				status.liveCheck = "skipped";
+			}
+			else if (liveCheck) {
+				const cookieString = cookies.map(item => `${item.key}=${item.value}`).join("; ");
+				const fingerprint = `${stat.mtimeMs}:${status.fileSizeBytes}:${status.cookieCount}`;
+				if (appstateLiveCheckCache.fingerprint === fingerprint && Date.now() - appstateLiveCheckCache.checkedAt < 60 * 1000) {
+					status.liveCheck = appstateLiveCheckCache.result;
+				}
+				else {
+					const cookieIsUsable = await checkLiveCookie(cookieString, config.facebookAccount?.userAgent);
+					status.liveCheck = cookieIsUsable ? "usable" : "expired_or_invalid";
+					appstateLiveCheckCache.fingerprint = fingerprint;
+					appstateLiveCheckCache.checkedAt = Date.now();
+					appstateLiveCheckCache.result = status.liveCheck;
+				}
+				status.usability = status.liveCheck === "usable" ? "usable" : "expired_or_invalid";
+			}
+			else {
+				status.liveCheck = "skipped";
+				status.usability = "unknown";
+			}
+			status.isUsable = status.usability === "usable";
 		}
 		catch (e) {
 			return status;
@@ -326,7 +472,7 @@ module.exports = async (api) => {
 		const totalUser = (await usersData.getAll()).length;
 		const prefix = config.prefix;
 		const uptime = utils.convertTime(process.uptime() * 1000);
-		const appstate = readAppstateStatus();
+		const appstate = await readAppstateStatus();
 		const gemini = await readGeminiStatus();
 
 		res.render("stats", {
@@ -343,11 +489,46 @@ module.exports = async (api) => {
 
 	app.get("/monitor", isAuthenticated, isAdmin, async (req, res) => {
 		res.render("monitor", {
-			appstate: readAppstateStatus(),
+			appstate: await readAppstateStatus({ liveCheck: true }),
 			gemini: await readGeminiStatus(),
+			runtimeLogs: runtimeLogState.lines,
 			autoRefreshFbstate: !!config.autoRefreshFbstate,
 			botStarted: !!global.GoatBot?.Listening,
 			botStartInProgress: !!global.GoatBot?.bootingBotFromTrigger
+		});
+	});
+
+	app.get("/admin/system/logs", isAuthenticated, isAdmin, (req, res) => {
+		res.send({
+			status: "success",
+			lines: runtimeLogState.lines
+		});
+	});
+
+	app.get("/admin/system/logs/stream", isAuthenticated, isAdmin, (req, res) => {
+		if (runtimeLogState.clients.size >= 20)
+			return res.status(429).send("Too many realtime log viewers");
+
+		res.setHeader("Content-Type", "text/event-stream");
+		res.setHeader("Cache-Control", "no-cache, no-transform");
+		res.setHeader("Connection", "keep-alive");
+		res.flushHeaders?.();
+		res.write(":ok\n\n");
+
+		runtimeLogState.clients.add(res);
+		const heartbeat = setInterval(() => {
+			try {
+				res.write(":ping\n\n");
+			}
+			catch (_e) {
+				clearInterval(heartbeat);
+				runtimeLogState.clients.delete(res);
+			}
+		}, 25000);
+
+		req.on("close", () => {
+			clearInterval(heartbeat);
+			runtimeLogState.clients.delete(res);
 		});
 	});
 
