@@ -303,6 +303,16 @@ module.exports = async (api) => {
 		res.render("home");
 	});
 
+	app.get(["/health", "/healthz"], (req, res) => {
+		res.status(200).send({
+			status: "ok",
+			timestamp: new Date().toISOString(),
+			uptimeSec: Math.floor(process.uptime()),
+			botStarted: !!global.GoatBot?.Listening,
+			botStartInProgress: !!global.GoatBot?.bootingBotFromTrigger
+		});
+	});
+
 	app.get("/stats", async (req, res) => {
 		let fcaVersion;
 		try {
