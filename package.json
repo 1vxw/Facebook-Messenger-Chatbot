@@ -60,6 +60,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "start:azure": "node start.azure.js",
     "dev": "set NODE_ENV=development&& node index.js",
     "prod": "set NODE_ENV=production&& node index.js"
   },
