@@ -13,6 +13,20 @@ function readConfig() {
 }
 
 function installPlaywrightChromium() {
+	const configuredPath = process.env.PLAYWRIGHT_BROWSERS_PATH || "";
+	if (process.platform === "linux") {
+		if (/^[A-Za-z]:\\/.test(configuredPath)) {
+			process.env.PLAYWRIGHT_BROWSERS_PATH = "/home/site/playwright-browsers";
+			console.log(`[AZURE_START] Overriding invalid Linux browser path "${configuredPath}" -> "${process.env.PLAYWRIGHT_BROWSERS_PATH}"`);
+		}
+	}
+	else if (process.platform === "win32") {
+		if (configuredPath.startsWith("/home/")) {
+			process.env.PLAYWRIGHT_BROWSERS_PATH = "D:\\home\\site\\playwright-browsers";
+			console.log(`[AZURE_START] Overriding invalid Windows browser path "${configuredPath}" -> "${process.env.PLAYWRIGHT_BROWSERS_PATH}"`);
+		}
+	}
+
 	const cliPath = path.join(process.cwd(), "node_modules", "playwright", "cli.js");
 	if (!fs.existsSync(cliPath)) {
 		console.log("[AZURE_START] Playwright CLI not found, skipping browser install.");
@@ -46,4 +60,3 @@ else
 	console.log("[AZURE_START] browserRenew disabled, skipping Playwright install.");
 
 startBot();
-
