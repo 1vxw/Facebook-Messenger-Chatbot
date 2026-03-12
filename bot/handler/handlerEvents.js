@@ -158,14 +158,21 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 		let threadData = global.db.allThreadData.find(t => t.threadID == threadID);
 		let userData = global.db.allUserData.find(u => u.userID == senderID);
 
-		if (!userData && !isNaN(senderID))
-			userData = await usersData.create(senderID);
+		if (!userData && !isNaN(senderID)) {
+			try {
+				userData = await usersData.create(senderID);
+			}
+			catch (_e) {}
+		}
 
 		if (!threadData && !isNaN(threadID)) {
-			if (global.temp.createThreadDataError.includes(threadID))
-				return;
-			threadData = await threadsData.create(threadID);
-			global.db.receivedTheFirstMessage[threadID] = true;
+			if (!global.temp.createThreadDataError.includes(threadID)) {
+				try {
+					threadData = await threadsData.create(threadID);
+					global.db.receivedTheFirstMessage[threadID] = true;
+				}
+				catch (_e) {}
+			}
 		}
 		else {
 			if (
@@ -175,6 +182,32 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 				global.db.receivedTheFirstMessage[threadID] = true;
 				await threadsData.refreshInfo(threadID);
 			}
+		}
+
+		// Fallback for inbox/private threads when Facebook thread metadata cannot be created.
+		// This keeps command handling alive instead of silently dropping the message.
+		if (!threadData) {
+			threadData = {
+				threadID,
+				threadName: "",
+				adminIDs: [],
+				members: [],
+				banned: {},
+				settings: {},
+				data: {},
+				isGroup: !!isGroup
+			};
+		}
+
+		// Fallback for DM/new users when profile lookup fails; avoid crashing checks/logging.
+		if (!userData) {
+			userData = {
+				userID: senderID,
+				name: senderID || "Unknown User",
+				banned: {},
+				settings: {},
+				data: {}
+			};
 		}
 
 		if (typeof threadData.settings.hideNotiMessage == "object")

@@ -1,17 +1,31 @@
 const createFuncMessage = global.utils.message;
 const handlerCheckDB = require("./handlerCheckData.js");
+const { getPrefix, log } = global.utils;
 
 module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData) => {
 	const handlerEvents = require(process.env.NODE_ENV == 'development' ? "./handlerEvents.dev.js" : "./handlerEvents.js")(api, threadModel, userModel, dashBoardModel, globalModel, usersData, threadsData, dashBoardData, globalData);
 
 	return async function (event) {
-		// Check if the bot is in the inbox and anti inbox is enabled
+		const senderID = event.senderID || event.userID || event.author;
+		const isAdminBot = global.GoatBot.config.adminBot?.includes(senderID);
+		const isInboxMessage = event.isGroup === false || (event.senderID && event.senderID == event.threadID);
+		const rawBody = typeof event.body == "string" ? event.body.trim() : "";
+		const prefix = event.threadID ? getPrefix(event.threadID) : global.GoatBot.config.prefix;
+		const isExplicitBotCall = !!rawBody && (
+			rawBody.startsWith(prefix) ||
+			/\bvance\b/i.test(rawBody)
+		);
+
+		// antiInbox keeps random DMs muted but still allows explicit bot calls.
 		if (
 			global.GoatBot.config.antiInbox == true &&
-			(event.senderID == event.threadID || event.userID == event.senderID || event.isGroup == false) &&
-			(event.senderID || event.userID || event.isGroup == false)
-		)
+			isInboxMessage &&
+			!isExplicitBotCall &&
+			!isAdminBot
+		) {
+			log.info("ANTI_INBOX", `Ignored inbox message from ${senderID} in ${event.threadID}`);
 			return;
+		}
 
 		const message = createFuncMessage(api, event);
 
@@ -26,6 +40,9 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
 			typ, presence, read_receipt
 		} = handlerChat;
 
+		if (event.isGroup === false && typeof event.body === "string" && event.body.trim()) {
+			log.info("DM_DISPATCH", `type=${event.type || "unknown"} thread=${event.threadID} sender=${senderID} body=${event.body.slice(0, 80)}`);
+		}
 
 		onAnyEvent();
 		switch (event.type) {
@@ -61,6 +78,14 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
 			// { /* code block */ }
 			// break;
 			default:
+				// Some Facebook clients may emit different message-like event types in 1:1 chats.
+				// If we still have text + thread, run command/chat handlers as a safe fallback.
+				if (typeof event.body === "string" && event.threadID) {
+					onFirstChat();
+					onChat();
+					onStart();
+					onReply();
+				}
 				break;
 		}
 	};

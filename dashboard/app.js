@@ -43,7 +43,7 @@ module.exports = async (api) => {
 		await require("./connectDB.js")();
 
 	const { utils, utils: { drive } } = global;
-	const { config } = global.GoatBot;
+	const { config, configCommands } = global.GoatBot;
 	const { expireVerifyCode } = config.dashBoard;
 	const { gmailAccount } = config.credentials;
 
@@ -285,6 +285,11 @@ module.exports = async (api) => {
 		fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 	}
 
+	function saveConfigCommandsToDisk() {
+		const configCommandsPath = process.cwd() + (process.env.NODE_ENV == "development" ? "/configCommands.dev.json" : "/configCommands.json");
+		fs.writeFileSync(configCommandsPath, JSON.stringify(configCommands, null, 2));
+	}
+
 	function getGclassConnectSessions() {
 		if (!global.temp)
 			global.temp = {};
@@ -432,11 +437,14 @@ module.exports = async (api) => {
 		return status;
 	}
 
-	async function readGeminiStatus() {
-		const key = (config.credentials?.gmailAccount?.apiKey || process.env.GEMINI_API_KEY || "").trim();
+	async function readAiStatus() {
+		const key = (configCommands?.envCommands?.vance?.apiKey || process.env.GROQ_API_KEY || "").trim();
+		const model = (configCommands?.envCommands?.vance?.model || process.env.GROQ_MODEL || "llama-3.1-8b-instant").trim();
 		const result = {
 			configured: !!key,
 			maskedKey: key ? `${key.slice(0, 6)}...${key.slice(-4)}` : "",
+			model,
+			provider: "groq",
 			check: "not_checked",
 			error: null
 		};
@@ -445,16 +453,40 @@ module.exports = async (api) => {
 			return result;
 
 		try {
-			const resp = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
-				timeout: 10000
+			const resp = await axios.get("https://api.groq.com/openai/v1/models", {
+				timeout: 10000,
+				headers: {
+					Authorization: `Bearer ${key}`
+				}
 			});
-			result.check = Array.isArray(resp.data?.models) ? "ok" : "unexpected_response";
+			const models = Array.isArray(resp.data?.data) ? resp.data.data : [];
+			result.check = models.some(item => item?.id === model) ? "ok" : "model_not_found";
 		}
 		catch (err) {
 			result.check = "error";
-			result.error = err?.response?.data?.error?.message || err.message;
+			result.error = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
 		}
 		return result;
+	}
+
+	async function stopBotOnly() {
+		if (!global.GoatBot?.Listening)
+			return { stopped: false, message: "Bot is already stopped" };
+
+		const stopFn = global.GoatBot?.fcaApi?.stopListening;
+		if (typeof stopFn === "function") {
+			await new Promise((resolve) => {
+				try {
+					stopFn(() => resolve());
+				}
+				catch (_e) {
+					resolve();
+				}
+			});
+		}
+
+		global.GoatBot.Listening = null;
+		return { stopped: true, message: "Bot listener stopped" };
 	}
 
 
@@ -598,7 +630,7 @@ module.exports = async (api) => {
 		const prefix = config.prefix;
 		const uptime = utils.convertTime(process.uptime() * 1000);
 		const appstate = await readAppstateStatus();
-		const gemini = await readGeminiStatus();
+		const ai = await readAiStatus();
 
 		res.render("stats", {
 			fcaVersion,
@@ -608,14 +640,14 @@ module.exports = async (api) => {
 			uptime,
 			uptimeSecond: process.uptime(),
 			appstate,
-			gemini
+			ai
 		});
 	});
 
 	app.get("/monitor", isAuthenticated, isAdmin, async (req, res) => {
 		res.render("monitor", {
 			appstate: await readAppstateStatus({ liveCheck: true }),
-			gemini: await readGeminiStatus(),
+			ai: await readAiStatus(),
 			runtimeLogs: runtimeLogState.lines,
 			autoRefreshFbstate: !!config.autoRefreshFbstate,
 			botStarted: !!global.GoatBot?.Listening,
@@ -659,7 +691,7 @@ module.exports = async (api) => {
 
 	app.post("/admin/system/secrets", isAuthenticated, isAdmin, async (req, res) => {
 		try {
-			const { appstate, geminiKey } = req.body;
+			const { appstate, geminiKey, aiApiKey } = req.body;
 			let updated = [];
 
 			if (typeof appstate === "string" && appstate.trim()) {
@@ -677,15 +709,30 @@ module.exports = async (api) => {
 				updated.push("appstate");
 			}
 
-			if (typeof geminiKey === "string" && geminiKey.trim()) {
-				config.credentials.gmailAccount.apiKey = geminiKey.trim();
-				updated.push("geminiKey");
+			const finalAiKey = typeof aiApiKey === "string" && aiApiKey.trim()
+				? aiApiKey.trim()
+				: typeof geminiKey === "string" && geminiKey.trim()
+					? geminiKey.trim()
+					: "";
+
+			if (finalAiKey) {
+				configCommands.envCommands = configCommands.envCommands || {};
+				for (const commandName of ["vance", "vancetest", "cm", "croom", "gclass"]) {
+					configCommands.envCommands[commandName] = configCommands.envCommands[commandName] || {};
+					configCommands.envCommands[commandName].apiKey = finalAiKey;
+					configCommands.envCommands[commandName].model = "llama-3.1-8b-instant";
+					// keep compatibility for legacy configs that still read gemini* keys
+					configCommands.envCommands[commandName].geminiApiKey = finalAiKey;
+					configCommands.envCommands[commandName].geminiModel = "llama-3.1-8b-instant";
+				}
+				updated.push("aiApiKey");
 			}
 
 			if (updated.length === 0)
 				return res.status(400).send({ status: "error", message: "No secret value provided" });
 
 			saveConfigToDisk();
+			saveConfigCommandsToDisk();
 			return res.send({
 				status: "success",
 				message: `Updated: ${updated.join(", ")}`
@@ -703,6 +750,27 @@ module.exports = async (api) => {
 
 	app.post("/admin/system/start", isAuthenticated, isAdmin, async (req, res) => {
 		try {
+			const action = String(req.body?.action || "").trim().toLowerCase();
+			if (action === "stop_bot" || action === "stop") {
+				const result = await stopBotOnly();
+				return res.send({ status: "success", message: result.message });
+			}
+
+			if (action === "restart_bot" || action === "restart") {
+				await stopBotOnly();
+
+				if (global.GoatBot?.__loginBootstrapReady !== true) {
+					for (let i = 0; i < 20 && global.GoatBot?.__loginBootstrapReady !== true; i++)
+						await new Promise(resolve => setTimeout(resolve, 200));
+				}
+
+				if (typeof global.GoatBot?.reLoginBot !== "function" || global.GoatBot?.__loginBootstrapReady !== true)
+					return res.status(500).send({ status: "error", message: "Bot restart handler is not available yet, please retry in 2-3 seconds." });
+
+				await global.GoatBot.reLoginBot();
+				return res.send({ status: "success", message: "Bot restarted" });
+			}
+
 			if (global.GoatBot?.Listening)
 				return res.send({ status: "success", message: "Bot is already running" });
 
@@ -722,6 +790,68 @@ module.exports = async (api) => {
 			return res.status(500).send({ status: "error", message: e.message });
 		}
 	});
+
+	app.post("/admin/system/bot/stop", isAuthenticated, isAdmin, async (req, res) => {
+		try {
+			const result = await stopBotOnly();
+			return res.send({ status: "success", message: result.message });
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	});
+
+	const botStopAliasHandler = async (req, res) => {
+		try {
+			const result = await stopBotOnly();
+			return res.send({ status: "success", message: result.message });
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	};
+	app.post("/admin/system/stop-bot", isAuthenticated, isAdmin, botStopAliasHandler);
+	app.post("/admin/bot/stop", isAuthenticated, isAdmin, botStopAliasHandler);
+
+	app.post("/admin/system/bot/restart", isAuthenticated, isAdmin, async (req, res) => {
+		try {
+			await stopBotOnly();
+
+			// Wait briefly in case login bootstrap is still wiring runtime handlers.
+			if (global.GoatBot?.__loginBootstrapReady !== true) {
+				for (let i = 0; i < 20 && global.GoatBot?.__loginBootstrapReady !== true; i++)
+					await new Promise(resolve => setTimeout(resolve, 200));
+			}
+
+			if (typeof global.GoatBot?.reLoginBot !== "function" || global.GoatBot?.__loginBootstrapReady !== true)
+				return res.status(500).send({ status: "error", message: "Bot restart handler is not available yet, please retry in 2-3 seconds." });
+
+			await global.GoatBot.reLoginBot();
+			return res.send({ status: "success", message: "Bot restarted" });
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	});
+
+	const botRestartAliasHandler = async (req, res) => {
+		try {
+			await stopBotOnly();
+			if (global.GoatBot?.__loginBootstrapReady !== true) {
+				for (let i = 0; i < 20 && global.GoatBot?.__loginBootstrapReady !== true; i++)
+					await new Promise(resolve => setTimeout(resolve, 200));
+			}
+			if (typeof global.GoatBot?.reLoginBot !== "function" || global.GoatBot?.__loginBootstrapReady !== true)
+				return res.status(500).send({ status: "error", message: "Bot restart handler is not available yet, please retry in 2-3 seconds." });
+			await global.GoatBot.reLoginBot();
+			return res.send({ status: "success", message: "Bot restarted" });
+		}
+		catch (e) {
+			return res.status(500).send({ status: "error", message: e.message });
+		}
+	};
+	app.post("/admin/system/restart-bot", isAuthenticated, isAdmin, botRestartAliasHandler);
+	app.post("/admin/bot/restart", isAuthenticated, isAdmin, botRestartAliasHandler);
 
 	app.post("/admin/system/stop", isAuthenticated, isAdmin, (req, res) => {
 		res.send({ status: "success", message: "Stop signal sent" });

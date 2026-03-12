@@ -5,6 +5,32 @@
 	title: "Runtime Monitor"
 }); %>
 
+<style>
+  .server-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .server-actions .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 130px;
+  }
+
+  @media (max-width: 420px) {
+    .server-actions .btn {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+  }
+
+  @media (min-width: 992px) {
+    .server-actions .btn {
+      flex: 0 0 auto;
+    }
+  }
+</style>
+
 <section class="post my-4">
   <div class="container">
     <div class="card mb-3">
@@ -30,13 +56,15 @@
     </div>
 
     <div class="card mb-3">
-      <div class="card-header"><h5 class="mb-0">Gemini API</h5></div>
+      <div class="card-header"><h5 class="mb-0">AI API (Groq)</h5></div>
       <div class="card-body">
         <table class="table table-sm table-borderless mb-0">
-          <tr><td>Configured</td><td><%= gemini.configured ? "Yes" : "No" %></td></tr>
-          <tr><td>Key (masked)</td><td><%= gemini.maskedKey || "-" %></td></tr>
-          <tr><td>Connectivity check</td><td><%= gemini.check %></td></tr>
-          <tr><td>Error</td><td><%= gemini.error || "-" %></td></tr>
+          <tr><td>Provider</td><td><%= ai.provider || "groq" %></td></tr>
+          <tr><td>Model</td><td><%= ai.model || "-" %></td></tr>
+          <tr><td>Configured</td><td><%= ai.configured ? "Yes" : "No" %></td></tr>
+          <tr><td>Key (masked)</td><td><%= ai.maskedKey || "-" %></td></tr>
+          <tr><td>Connectivity check</td><td><%= ai.check %></td></tr>
+          <tr><td>Error</td><td><%= ai.error || "-" %></td></tr>
         </table>
       </div>
     </div>
@@ -49,8 +77,8 @@
           <textarea id="appstateInput" class="form-control" rows="6" placeholder="Paste AppState JSON array here"></textarea>
         </div>
         <div class="mb-3">
-          <label for="geminiKeyInput" class="form-label">Gemini API Key</label>
-          <input id="geminiKeyInput" class="form-control" type="text" placeholder="Paste Gemini key here">
+          <label for="aiApiKeyInput" class="form-label">Groq API Key</label>
+          <input id="aiApiKeyInput" class="form-control" type="text" placeholder="Paste Groq key here">
         </div>
         <button id="saveSecretsBtn" class="btn btn-phoenix-primary">Save Secrets</button>
       </div>
@@ -68,8 +96,10 @@
       <div class="card-body pb-0">
         <div class="small text-muted mb-2">Bot status: <strong><%= botStarted ? "running" : (botStartInProgress ? "starting" : "stopped") %></strong></div>
       </div>
-      <div class="card-body d-flex gap-2">
+      <div class="card-body server-actions">
         <button id="startBtn" class="btn btn-success">Start Bot</button>
+        <button id="restartBotBtn" class="btn btn-info">Restart Bot</button>
+        <button id="stopBotBtn" class="btn btn-outline-danger">Stop Bot</button>
         <button id="restartBtn" class="btn btn-warning">Restart Server</button>
         <button id="stopBtn" class="btn btn-danger">Stop Server</button>
       </div>
@@ -79,6 +109,23 @@
 
 <script>
   $(function() {
+    function postWithFallback(urls, onSuccess, onFail) {
+      const list = Array.isArray(urls) ? urls.slice() : [urls];
+      const tryNext = () => {
+        if (!list.length)
+          return onFail && onFail();
+        const url = list.shift();
+        $.post(url, function(data) {
+          onSuccess && onSuccess(data);
+        }).fail(function(err) {
+          if (err?.status === 404)
+            return tryNext();
+          onFail && onFail(err);
+        });
+      };
+      tryNext();
+    }
+
     const maxLogLines = 15;
     const runtimeLogsEl = document.getElementById("runtimeLogs");
     const renderRuntimeLog = (line) => {
@@ -117,7 +164,7 @@
         method: "POST",
         data: {
           appstate: $("#appstateInput").val(),
-          geminiKey: $("#geminiKeyInput").val()
+          aiApiKey: $("#aiApiKeyInput").val()
         },
         success: function(data) {
           $.createToast({ type: "success", title: "Saved", message: data.message || "Secrets saved" });
@@ -155,6 +202,45 @@
         btn.disabled = false;
         btn.textContent = "Start Bot";
       });
+    });
+
+    $("#restartBotBtn").on("click", function() {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = "Restarting...";
+      postWithFallback(
+        ["/admin/system/bot/restart", "/admin/system/restart-bot", "/admin/bot/restart"],
+        function(data) {
+        $.createToast({ type: "success", title: "Bot Restart", message: data.message || "Bot restarted" });
+        setTimeout(() => location.reload(), 1000);
+      },
+      function(err) {
+        $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to restart bot" });
+      });
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = "Restart Bot Only";
+      }, 1200);
+    });
+
+    $("#stopBotBtn").on("click", function() {
+      if (!confirm("Stop bot listener only? Server will stay online.")) return;
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = "Stopping...";
+      postWithFallback(
+        ["/admin/system/bot/stop", "/admin/system/stop-bot", "/admin/bot/stop"],
+        function(data) {
+        $.createToast({ type: "warning", title: "Bot Stop", message: data.message || "Bot listener stopped" });
+        setTimeout(() => location.reload(), 1000);
+      },
+      function(err) {
+        $.createToast({ type: "error", title: "Error", message: err.responseJSON?.message || "Failed to stop bot" });
+      });
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = "Stop Bot Only";
+      }, 1200);
     });
 
     $("#stopBtn").on("click", function() {

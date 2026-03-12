@@ -996,6 +996,9 @@ async function startBot(loginWithEmail) {
 				const configLog = global.GoatBot.config.logEvents;
 				if (isSendNotiErrorMessage == true)
 					isSendNotiErrorMessage = false;
+				if (event && event.isGroup === false && typeof event.body === "string" && event.body.trim()) {
+					log.info("DM_EVENT_IN", `type=${event.type || "unknown"} thread=${event.threadID} sender=${event.senderID || event.userID || event.author} body=${event.body.slice(0, 80)}`);
+				}
 
 				// "whiteListMode": {
 				// 	"enable": false,

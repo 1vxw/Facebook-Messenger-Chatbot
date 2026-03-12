@@ -48,8 +48,8 @@
           <td><%= appstate.exists && appstate.validJson ? `Loaded (${appstate.usability})` : "Invalid or missing" %></td>
         </tr>
         <tr class="text-start">
-          <td><i class="fas fa-key"></i> Gemini key</td>
-          <td><%= gemini.configured ? `Configured (${gemini.check})` : "Not configured" %></td>
+          <td><i class="fas fa-key"></i> AI key (Groq)</td>
+          <td><%= ai.configured ? `Configured (${ai.check})` : "Not configured" %></td>
         </tr>
       </tbody>
     </table>

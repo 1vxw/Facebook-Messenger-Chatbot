@@ -19,7 +19,7 @@ const DOWNLOAD_DIR = path.join(__dirname, "tmp", "classroom");
 
 if (!global.temp)
 	global.temp = {};
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const GROQ_API_BASE = "https://api.groq.com/openai/v1";
 
 function isInvalidGrantError(err) {
 	const msg = String(
@@ -187,8 +187,45 @@ function isWeakTaskSummary(summary, task) {
 	return false;
 }
 
-async function summarizeTaskAboutWithGemini({ apiKey, model, task, index }) {
+function normalizeModelName(modelName) {
+	return String(modelName || "").replace(/^models\//, "").trim();
+}
+
+async function resolveClassroomModel(_apiKey, preferredModel) {
+	return normalizeModelName(preferredModel) || "llama-3.1-8b-instant";
+}
+
+async function callGroqText({ apiKey, model, prompt, maxTokens = 600, temperature = 0.2 }) {
 	const resolvedModel = await resolveClassroomModel(apiKey, model);
+	const { data } = await axios.post(`${GROQ_API_BASE}/chat/completions`, {
+		model: resolvedModel,
+		messages: [
+			{
+				role: "system",
+				content: "You are a concise academic assistant. Follow the user instructions strictly."
+			},
+			{
+				role: "user",
+				content: prompt
+			}
+		],
+		max_tokens: maxTokens,
+		temperature
+	}, {
+		timeout: 45000,
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			"Content-Type": "application/json"
+		}
+	});
+
+	const text = String(data?.choices?.[0]?.message?.content || "").trim();
+	if (!text)
+		throw new Error("Groq returned empty text");
+	return text;
+}
+
+async function summarizeTaskAboutWithGemini({ apiKey, model, task, index }) {
 	const prompt = [
 		"Summarize what this assignment is about in one short direct text.",
 		"Rules:",
@@ -207,60 +244,19 @@ async function summarizeTaskAboutWithGemini({ apiKey, model, task, index }) {
 		String(task?.courseWork?.description || "No description provided.")
 	].join("\n");
 
-	const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(resolvedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-	const { data } = await axios.post(url, {
-		contents: [{ role: "user", parts: [{ text: prompt }] }],
-		generationConfig: {
-			temperature: 0.1,
-			topP: 0.95,
-			maxOutputTokens: 120
-		}
-	}, { timeout: 25000 });
-
-	const text = data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("").replace(/\s+/g, " ").trim();
+	const text = (await callGroqText({
+		apiKey,
+		model,
+		prompt,
+		maxTokens: 120,
+		temperature: 0.1
+	})).replace(/\s+/g, " ").trim();
 	if (!text)
-		throw new Error("Gemini returned empty summary");
+		throw new Error("Groq returned empty summary");
 	return text;
 }
 
-function normalizeModelName(modelName) {
-	return String(modelName || "").replace(/^models\//, "").trim();
-}
-
-async function resolveClassroomModel(apiKey, preferredModel) {
-	if (!global.temp.classroomModelCache)
-		global.temp.classroomModelCache = {};
-	const preferred = normalizeModelName(preferredModel) || "gemini-1.5-flash";
-	const cacheKey = `${apiKey}:${preferred}`;
-	if (global.temp.classroomModelCache[cacheKey])
-		return global.temp.classroomModelCache[cacheKey];
-
-	const fallbackList = [preferred, "gemini-1.5-flash", "gemini-1.5-pro"].filter(Boolean);
-	try {
-		const { data } = await axios.get(`${GEMINI_API_BASE}/models?key=${encodeURIComponent(apiKey)}`, { timeout: 15000 });
-		const models = Array.isArray(data?.models) ? data.models : [];
-		const available = new Set(models.map(m => normalizeModelName(m?.name)).filter(Boolean));
-		for (const m of fallbackList) {
-			if (available.has(m)) {
-				global.temp.classroomModelCache[cacheKey] = m;
-				return m;
-			}
-		}
-		const firstGenerateCapable = models.find(m =>
-			Array.isArray(m?.supportedGenerationMethods) &&
-			m.supportedGenerationMethods.includes("generateContent")
-		);
-		const chosen = normalizeModelName(firstGenerateCapable?.name) || preferred;
-		global.temp.classroomModelCache[cacheKey] = chosen;
-		return chosen;
-	}
-	catch (_e) {
-		return preferred;
-	}
-}
-
 async function generateDraftTextWithGemini({ apiKey, model, task }) {
-	const resolvedModel = await resolveClassroomModel(apiKey, model);
 	const title = task?.courseWork?.title || "Untitled";
 	const description = task?.courseWork?.description || "No task description provided.";
 	const due = toDateString(task);
@@ -279,19 +275,15 @@ async function generateDraftTextWithGemini({ apiKey, model, task }) {
 		"Write the full draft answer now."
 	].join("\n");
 
-	const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(resolvedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-	const { data } = await axios.post(url, {
-		contents: [{ role: "user", parts: [{ text: prompt }] }],
-		generationConfig: {
-			temperature: 0.4,
-			topP: 0.95,
-			maxOutputTokens: 1800
-		}
-	}, { timeout: 45000 });
-
-	const text = data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("").trim();
+	const text = await callGroqText({
+		apiKey,
+		model,
+		prompt,
+		maxTokens: 1800,
+		temperature: 0.4
+	});
 	if (!text)
-		throw new Error("Gemini returned empty content");
+		throw new Error("Groq returned empty content");
 	return text;
 }
 
@@ -434,7 +426,6 @@ function surnameOrFullName(fullName) {
 }
 
 async function decideDraftFileTypeWithGemini({ apiKey, model, task, aiCapable, aiReason, aiDraft }) {
-	const resolvedModel = await resolveClassroomModel(apiKey, model);
 	const prompt = [
 		"You choose the best file type for a generated assignment draft.",
 		"Return ONLY valid JSON: {\"ext\":\"docx|pdf\",\"reason\":\"string\"}",
@@ -450,17 +441,13 @@ async function decideDraftFileTypeWithGemini({ apiKey, model, task, aiCapable, a
 		String(aiDraft || "").slice(0, 1200)
 	].join("\n");
 
-	const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(resolvedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-	const { data } = await axios.post(url, {
-		contents: [{ role: "user", parts: [{ text: prompt }] }],
-		generationConfig: {
-			temperature: 0.1,
-			topP: 0.95,
-			maxOutputTokens: 300
-		}
-	}, { timeout: 30000 });
-
-	const raw = data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("").trim();
+	const raw = await callGroqText({
+		apiKey,
+		model,
+		prompt,
+		maxTokens: 300,
+		temperature: 0.1
+	});
 	const parsed = safeJsonParse(raw);
 	const ext = String(parsed?.ext || "docx").toLowerCase();
 	const allow = new Set(["docx", "pdf"]);
@@ -499,7 +486,6 @@ async function writeDraftFile(localPath, ext, content) {
 }
 
 async function evaluateAndGenerateWithGemini({ apiKey, model, task }) {
-	const resolvedModel = await resolveClassroomModel(apiKey, model);
 	const title = task?.courseWork?.title || "Untitled";
 	const description = task?.courseWork?.description || "No task description provided.";
 	const due = toDateString(task);
@@ -528,29 +514,25 @@ async function evaluateAndGenerateWithGemini({ apiKey, model, task }) {
 		description
 	].join("\n");
 
-	const url = `${GEMINI_API_BASE}/models/${encodeURIComponent(resolvedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-	const { data } = await axios.post(url, {
-		contents: [{ role: "user", parts: [{ text: prompt }] }],
-		generationConfig: {
-			temperature: 0.2,
-			topP: 0.95,
-			maxOutputTokens: 1800
-		}
-	}, { timeout: 45000 });
-
-	const raw = data?.candidates?.[0]?.content?.parts?.map(p => p?.text || "").join("").trim();
+	const raw = await callGroqText({
+		apiKey,
+		model,
+		prompt,
+		maxTokens: 1800,
+		temperature: 0.2
+	});
 	if (!raw)
-		throw new Error("Gemini returned empty analysis");
+		throw new Error("Groq returned empty analysis");
 
 	const parsed = safeJsonParse(raw);
 	if (!parsed || typeof parsed.capable !== "boolean")
-		throw new Error("Gemini returned invalid analysis format");
+		throw new Error("AI returned invalid analysis format");
 
 	return {
 		capable: parsed.capable,
 		reason: String(parsed.reason || "").trim() || "No reason provided",
 		responseText: String(parsed.responseText || "").trim(),
-		model: resolvedModel
+		model: await resolveClassroomModel(apiKey, model)
 	};
 }
 
@@ -793,7 +775,7 @@ async function createDraftAttachmentForTask(senderID, task, aiConfig = {}, userF
 		}
 		catch (err) {
 			aiUsed = false;
-			aiError = err?.response?.data?.error?.message || err?.message || "Gemini unavailable";
+			aiError = err?.response?.data?.error?.message || err?.message || "AI unavailable";
 		}
 	}
 
@@ -911,26 +893,28 @@ module.exports = {
 		},
 		category: "utility",
 		guide: {
-			en: "   gclass connect\n"
+			en: "   gclass help\n"
+				+ "   gclass connect\n"
 				+ "   gclass status\n"
 				+ "   gclass logout\n"
 				+ "   gclass courses\n"
-				+ "   gclass tasks [courseIndex|courseId|courseName]\n"
-				+ "   gclass getTaskText <index>\n"
-				+ "   gclass automate [courseIndex|courseId|courseName]\n"
-				+ "   gclass doAll [2|3] [courseIndex|courseId|courseName]\n"
-				+ "   gclass tstatus <index>\n"
-				+ "   gclass unsubmit <index>\n"
-				+ "   gclass getDocs <index>"
+				+ "   gclass tasks [course index|course id|course name]\n"
+				+ "   gclass automate [course index|course id|course name]\n"
+				+ "   gclass gettasktext <task index>\n"
+				+ "   gclass tstatus <task index>\n"
+				+ "   gclass getdocs <task index>\n"
+				+ "   gclass submit <task index>\n"
+				+ "   gclass unsubmit <task index>\n"
+				+ "   gclass doall [2|3] [course index|course id|course name]"
 		},
 		envConfig: {
-			geminiApiKey: "",
-			geminiModel: "gemini-1.5-flash"
+			apiKey: "",
+			model: "llama-3.1-8b-instant"
 		}
 	},
 	langs: {
 		en: {
-			usage: "Quick start:\n- gclass connect\n- gclass status\n- gclass tasks\n- gclass logout\n\nAdvanced/manual:\n- gclass login\n- gclass authcode <code>",
+			usage: "Google Classroom command menu\n\n1) First-time setup\n- gclass connect : Link your Google account\n- gclass status : Check if account is linked\n- gclass logout : Remove linked account\n\n2) View your work\n- gclass courses : Show your active courses\n- gclass tasks [course] : Show pending tasks\n- gclass gettasktext <taskIndex> : Show full assignment text\n- gclass tstatus <taskIndex> : Show task status\n- gclass getdocs <taskIndex> : Download attached/submitted docs\n\n3) Complete and submit\n- gclass automate [course] : Pick one task and manage it via reply\n- gclass doall [2|3] [course] : Submit first 2 or 3 pending tasks\n- gclass unsubmit <taskIndex> : Reclaim a turned-in task\n\nTips:\n- [course] can be course index, course id, or part of course name\n- [taskIndex] is from the number shown in gclass tasks\n\nLegacy/manual login:\n- gclass login\n- gclass authcode <code>",
 			connectLinkReady: "Tap this link to connect your Google Classroom account:\n%1\n\nThis link expires in 10 minutes.",
 			connectFallbackManual: "Public callback URL is not configured on this bot yet. Use manual mode:\n1) Send: gclass login\n2) After Google redirects, copy the code\n3) Send: gclass authcode <code>",
 			statusConnected: "Google Classroom: Connected (%1).",
@@ -964,6 +948,8 @@ module.exports = {
 			tokenExpired: "Google connection expired and was removed.\n%1",
 			loginCodeMissing: "Missing code. Usage: gclass authcode <code>",
 			authFriendlyError: "Google connection failed. Please run: gclass connect\nDetails: %1"
+			,
+			submitUsageHint: "To submit directly: gclass submit <taskIndex>"
 		}
 	},
 
@@ -992,6 +978,9 @@ module.exports = {
 		const senderID = String(event.senderID);
 		const threadID = String(event.threadID || "");
 		try {
+			if (isSub("help", "h", "menu"))
+				return message.reply(getLang("usage"));
+
 			if (isSub("status")) {
 				const token = await getUserToken(senderID);
 				const summary = summarizeTokenStatus(token);
@@ -1123,7 +1112,7 @@ module.exports = {
 				return message.reply(getLang("unsubmitResult", idx + 1, `${result.ok ? "OK" : "FAILED"} - ${result.message}`));
 			}
 
-			if (sub === "getDocs") {
+			if (isSub("getdocs", "docs")) {
 				const idx = parseInt(args[1], 10) - 1;
 				const bucket = getStateBucket(senderID, threadID);
 				const tasks = bucket?.tasks || await fetchTodoTasks(senderID);
@@ -1139,6 +1128,16 @@ module.exports = {
 					});
 				}
 				return message.reply(getLang("docsFailed", notes.join("\n")));
+			}
+
+			if (sub === "submit") {
+				const idx = parseInt(args[1], 10) - 1;
+				const bucket = getStateBucket(senderID, threadID);
+				const tasks = bucket?.tasks || await fetchTodoTasks(senderID);
+				if (isNaN(idx) || idx < 0 || idx >= tasks.length)
+					return message.reply(getLang("invalidIndex"));
+				const result = await turnInTask(senderID, tasks[idx]);
+				return message.reply(getLang("automationResult", idx + 1, `${result.ok ? "OK" : "FAILED"} - ${result.message}`));
 			}
 
 			return message.reply(getLang("subCommandUnknown", getLang("usage")));
@@ -1181,8 +1180,8 @@ module.exports = {
 				let shortText;
 				try {
 					const cfg = envCommands?.[Reply.commandName] || {};
-					const apiKey = cfg.geminiApiKey || process.env.GEMINI_API_KEY || "";
-					const model = cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-1.5-flash";
+					const apiKey = cfg.apiKey || cfg.geminiApiKey || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || "";
+					const model = cfg.model || cfg.geminiModel || process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "llama-3.1-8b-instant";
 					shortText = apiKey
 						? await summarizeTaskAboutWithGemini({ apiKey, model, task, index: infoIndex })
 						: summarizeTaskAboutFallback(task, infoIndex);
@@ -1248,8 +1247,8 @@ module.exports = {
 						}
 						catch (_e) {}
 						draft = await createDraftAttachmentForTask(senderID, task, {
-							apiKey: cfg.geminiApiKey || process.env.GEMINI_API_KEY || "",
-							model: cfg.geminiModel || process.env.GEMINI_MODEL || "gemini-1.5-flash"
+							apiKey: cfg.apiKey || cfg.geminiApiKey || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || "",
+							model: cfg.model || cfg.geminiModel || process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "llama-3.1-8b-instant"
 						}, fullName);
 					}
 				catch (err) {
@@ -1264,7 +1263,7 @@ module.exports = {
 						message.unsend(waitMsg.messageID).catch(() => {});
 				}
 				const attachStatus = draft.attached ? "attached to Classroom submission" : `not attached (${draft.attachError || "permission/project restriction"})`;
-				const aiMode = draft.aiUsed ? "enabled" : `fallback (${draft.aiError || "gemini unavailable"})`;
+				const aiMode = draft.aiUsed ? "enabled" : `fallback (${draft.aiError || "ai unavailable"})`;
 				const aiCapability = draft.aiCapable === true ? "capable" : "not capable";
 					return message.reply({
 						body: getLang(

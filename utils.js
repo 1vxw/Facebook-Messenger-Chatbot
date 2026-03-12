@@ -346,6 +346,45 @@ function jsonStringifyColor(obj, filter, indent, level) {
 
 
 function message(api, event) {
+	function handleMessageRequestAsync(threadID, accept = true) {
+		return new Promise((resolve, reject) => {
+			if (typeof api.handleMessageRequest !== "function")
+				return resolve(false);
+			api.handleMessageRequest(threadID, accept, (err) => {
+				if (err)
+					return reject(err);
+				resolve(true);
+			});
+		});
+	}
+
+	async function tryAcceptMessageRequestAndRetry(sendFn) {
+		if (event.isGroup !== false)
+			return null;
+		try {
+			await handleMessageRequestAsync(event.threadID, true);
+			return await sendFn();
+		}
+		catch (err) {
+			return { __retryError: err };
+		}
+	}
+
+	function normalizeError(err) {
+		if (!err)
+			return "Unknown error";
+		if (typeof err === "string")
+			return err;
+		if (err.stack)
+			return utils.removeHomeDir(err.stack.split("\n").slice(0, 5).join("\n"));
+		try {
+			return JSON.stringify(err);
+		}
+		catch (_e) {
+			return String(err);
+		}
+	}
+
 	function trackBotMessage(sentInfo) {
 		try {
 			const messageID = sentInfo?.messageID;
@@ -403,10 +442,20 @@ function message(api, event) {
 				return info;
 			}
 			catch (err) {
-				if (JSON.stringify(err).includes('spam')) {
+				const errText = JSON.stringify(err || {});
+				if (errText.includes('spam')) {
 					setErrorUptime();
 					throw err;
 				}
+				const retried = await tryAcceptMessageRequestAndRetry(async () => {
+					const info = await api.sendMessage(sanitizeForm(form), event.threadID, callback);
+					trackBotMessage(info);
+					return info;
+				});
+				if (retried && !retried.__retryError)
+					return retried;
+				log.err("SEND_MESSAGE", `Failed to send message to ${event.threadID}`, normalizeError(retried?.__retryError || err));
+				throw (retried?.__retryError || err);
 			}
 		},
 		reply: async (form, callback) => {
@@ -417,10 +466,20 @@ function message(api, event) {
 				return info;
 			}
 			catch (err) {
-				if (JSON.stringify(err).includes('spam')) {
+				const errText = JSON.stringify(err || {});
+				if (errText.includes('spam')) {
 					setErrorUptime();
 					throw err;
 				}
+				const retried = await tryAcceptMessageRequestAndRetry(async () => {
+					const info = await api.sendMessage(sanitizeForm(form), event.threadID, callback, event.messageID);
+					trackBotMessage(info);
+					return info;
+				});
+				if (retried && !retried.__retryError)
+					return retried;
+				log.err("SEND_REPLY", `Failed to reply in ${event.threadID}`, normalizeError(retried?.__retryError || err));
+				throw (retried?.__retryError || err);
 			}
 		},
 		unsend: async (messageID, callback) => await api.unsendMessage(messageID, callback),
@@ -430,10 +489,13 @@ function message(api, event) {
 				return await api.setMessageReaction(emoji, messageID, callback, true);
 			}
 			catch (err) {
-				if (JSON.stringify(err).includes('spam')) {
+				const errText = JSON.stringify(err || {});
+				if (errText.includes('spam')) {
 					setErrorUptime();
 					throw err;
 				}
+				log.err("SEND_REACTION", `Failed to react in ${event.threadID}`, normalizeError(err));
+				throw err;
 			}
 		},
 		err: async (err) => await sendMessageError(err),

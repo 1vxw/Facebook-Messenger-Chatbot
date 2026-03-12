@@ -4,7 +4,7 @@ const { log, getText } = utils;
 const { creatingThreadData, creatingUserData } = global.client.database;
 
 module.exports = async function (usersData, threadsData, event) {
-	const { threadID } = event;
+	const { threadID, isGroup } = event;
 	const senderID = event.senderID || event.author || event.userID;
 
 	// ———————————— CHECK THREAD DATA ———————————— //
@@ -15,11 +15,10 @@ module.exports = async function (usersData, threadsData, event) {
 
 			const findInCreatingThreadData = creatingThreadData.find(t => t.threadID == threadID);
 			if (!findInCreatingThreadData) {
-				if (global.db.allThreadData.some(t => t.threadID == threadID))
-					return;
-
-				const threadData = await threadsData.create(threadID);
-				log.info("DATABASE", `New Thread: ${threadID} | ${threadData.threadName} | ${config.database.type}`);
+				if (!global.db.allThreadData.some(t => t.threadID == threadID)) {
+					const threadData = await threadsData.create(threadID);
+					log.info("DATABASE", `New Thread: ${threadID} | ${threadData.threadName} | ${config.database.type}`);
+				}
 			}
 			else {
 				await findInCreatingThreadData.promise;
@@ -27,7 +26,10 @@ module.exports = async function (usersData, threadsData, event) {
 		}
 		catch (err) {
 			if (err.name != "DATA_ALREADY_EXISTS") {
-				global.temp.createThreadDataError.push(threadID);
+				// Do not permanently blacklist 1:1 inbox threads when thread metadata lookup fails.
+				// DMs can still work with runtime fallback data.
+				if (isGroup === true)
+					global.temp.createThreadDataError.push(threadID);
 				log.err("DATABASE", getText("handlerCheckData", "cantCreateThread", threadID), err);
 			}
 		}
@@ -39,11 +41,10 @@ module.exports = async function (usersData, threadsData, event) {
 		try {
 			const findInCreatingUserData = creatingUserData.find(u => u.userID == senderID);
 			if (!findInCreatingUserData) {
-				if (db.allUserData.some(u => u.userID == senderID))
-					return;
-
-				const userData = await usersData.create(senderID);
-				log.info("DATABASE", `New User: ${senderID} | ${userData.name} | ${config.database.type}`);
+				if (!db.allUserData.some(u => u.userID == senderID)) {
+					const userData = await usersData.create(senderID);
+					log.info("DATABASE", `New User: ${senderID} | ${userData.name} | ${config.database.type}`);
+				}
 			}
 			else {
 				await findInCreatingUserData.promise;

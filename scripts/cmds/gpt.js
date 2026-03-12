@@ -3,7 +3,7 @@
 const axios = require("axios");
 
 const maxStorageMessage = 4;
-const geminiApiBase = "https://generativelanguage.googleapis.com/v1beta";
+const groqApiBase = "https://api.groq.com/openai/v1";
 
 if (!global.temp)
 	global.temp = {};
@@ -16,12 +16,8 @@ if (!global.temp.geminiModelCache)
 if (!global.temp.vanceSentMessages)
 	global.temp.vanceSentMessages = {};
 
-const { geminiUsing, geminiHistory, geminiModelCache } = global.temp;
+const { geminiUsing, geminiHistory } = global.temp;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-function normalizeModelName(modelName) {
-	return String(modelName || "").replace(/^models\//, "").trim();
-}
 
 function sanitizeOutput(text) {
 	if (!text)
@@ -41,46 +37,6 @@ function sanitizeOutput(text) {
 		.trim();
 }
 
-async function resolveModel(apiKey, preferredModel) {
-	const preferred = normalizeModelName(preferredModel) || "gemini-1.5-flash";
-	const cacheKey = `${apiKey}:${preferred}`;
-	if (geminiModelCache[cacheKey])
-		return geminiModelCache[cacheKey];
-
-	try {
-		const { data } = await axios.get(`${geminiApiBase}/models?key=${encodeURIComponent(apiKey)}`, {
-			timeout: 15000
-		});
-		const models = Array.isArray(data?.models) ? data.models : [];
-		const available = models.map(m => normalizeModelName(m?.name)).filter(Boolean);
-
-		if (available.includes(preferred)) {
-			geminiModelCache[cacheKey] = preferred;
-			return preferred;
-		}
-
-		for (const candidate of ["gemini-1.5-flash", "gemini-1.5-pro"]) {
-			if (available.includes(candidate)) {
-				geminiModelCache[cacheKey] = candidate;
-				return candidate;
-			}
-		}
-
-		const firstGenerateCapable = models.find(m =>
-			Array.isArray(m?.supportedGenerationMethods)
-			&& m.supportedGenerationMethods.includes("generateContent")
-		);
-		if (firstGenerateCapable?.name) {
-			const fallback = normalizeModelName(firstGenerateCapable.name);
-			geminiModelCache[cacheKey] = fallback;
-			return fallback;
-		}
-	}
-	catch (_e) {}
-
-	geminiModelCache[cacheKey] = preferred;
-	return preferred;
-}
 
 async function buildThreadContext(event, threadsData) {
 	if (!event?.threadID || !threadsData)
@@ -150,8 +106,8 @@ async function buildUserInfoContext(event, api) {
 }
 
 async function generateVanceText({ prompt, event, senderID, commandName, envCommands, threadsData, api, getLang }) {
-	const apiKey = envCommands?.[commandName]?.apiKey || process.env.GEMINI_API_KEY || "";
-	const preferredModel = envCommands?.[commandName]?.model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
+	const apiKey = envCommands?.[commandName]?.apiKey || process.env.GROQ_API_KEY || "";
+	const preferredModel = envCommands?.[commandName]?.model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
 	if (!apiKey)
 		throw new Error(getLang("apiKeyEmpty"));
@@ -172,34 +128,41 @@ async function generateVanceText({ prompt, event, senderID, commandName, envComm
 			? `You are Vance, a general AI assistant in Messenger.\nAnswer any normal question directly.\nWhen the user asks about people/groups, use the context below.\nIf specific profile/group data is missing, say it's unavailable, but still answer the rest of the request.\n\nContext:\n${contextChunks.join("\n\n")}\n\nUser request: ${normalizedPrompt}`
 			: `You are Vance, a helpful general AI assistant in Messenger.\nUser request: ${normalizedPrompt}`;
 
-		const contents = [];
+		const messages = [];
+		messages.push({
+			role: "system",
+			content: "You are Vance, a helpful general AI assistant in Messenger."
+		});
 		for (const item of history) {
 			if (!item?.role || !item?.content)
 				continue;
-			contents.push({
-				role: item.role === "assistant" ? "model" : "user",
-				parts: [{ text: String(item.content) }]
+			messages.push({
+				role: item.role === "assistant" ? "assistant" : "user",
+				content: String(item.content)
 			});
 		}
-		contents.push({
+		messages.push({
 			role: "user",
-			parts: [{ text: finalPrompt }]
+			content: finalPrompt
 		});
 
-		const model = await resolveModel(apiKey, preferredModel);
-		const url = `${geminiApiBase}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-		const response = await axios.post(url, {
-			contents,
-			generationConfig: { maxOutputTokens: 500 }
+		const response = await axios.post(`${groqApiBase}/chat/completions`, {
+			model: preferredModel,
+			messages,
+			max_tokens: 500,
+			temperature: 0.5
 		}, {
-			timeout: 60000
+			timeout: 60000,
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				"Content-Type": "application/json"
+			}
 		});
 
-		const parts = response?.data?.candidates?.[0]?.content?.parts || [];
-		const rawText = parts.map(p => p?.text || "").join("").trim();
+		const rawText = response?.data?.choices?.[0]?.message?.content?.trim() || "";
 		const text = sanitizeOutput(rawText);
 		if (!text)
-			throw new Error("Empty response from Gemini API");
+			throw new Error("Empty response from Groq API");
 
 		if (!Array.isArray(geminiHistory[senderID]))
 			geminiHistory[senderID] = [];
@@ -277,24 +240,24 @@ module.exports = {
 		countDown: 5,
 		role: 0,
 		description: {
-			vi: "Gemini chat",
-			en: "Gemini chat"
+			vi: "Groq chat",
+			en: "Groq chat"
 		},
 		category: "box chat",
 		guide: {
-			vi: "   {pn} <noi dung> - chat voi Gemini",
-			en: "   {pn} <content> - chat with Gemini"
+			vi: "   {pn} <noi dung> - chat voi Groq",
+			en: "   {pn} <content> - chat with Groq"
 		},
 		envConfig: {
 			apiKey: "",
-			model: "gemini-1.5-flash"
+			model: "llama-3.1-8b-instant"
 		}
 	},
 
 	langs: {
 		vi: {
-			apiKeyEmpty: "Vui long them Gemini API key trong configCommands.json -> envCommands -> vance -> apiKey",
-			yourAreUsing: "Ban dang su dung Gemini chat, vui long doi yeu cau truoc ket thuc",
+			apiKeyEmpty: "Vui long them Groq API key trong configCommands.json -> envCommands -> vance -> apiKey",
+			yourAreUsing: "Ban dang su dung Groq chat, vui long doi yeu cau truoc ket thuc",
 			invalidContent: "Vui long nhap noi dung ban muon chat",
 			cleared: "Da xoa %1 tin nhan cua Vance trong doan chat nay",
 			noMessagesToClear: "Khong co tin nhan Vance nao trong 24 gio gan day de xoa",
@@ -303,7 +266,7 @@ module.exports = {
 			error: "Da co loi xay ra\n%1"
 		},
 		en: {
-			apiKeyEmpty: "Please set Gemini API key in configCommands.json -> envCommands -> vance -> apiKey",
+			apiKeyEmpty: "Please set Groq API key in configCommands.json -> envCommands -> vance -> apiKey",
 			yourAreUsing: "Pending request for vance, please wait until the previous request ends",
 			invalidContent: "Please enter the content you want to chat",
 			cleared: "Removed %1 Vance message(s) in this thread",
