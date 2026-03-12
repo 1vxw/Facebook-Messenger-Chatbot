@@ -1,17 +1,22 @@
 const Canvas = require("canvas");
 const { uploadZippyshare } = global.utils;
 
-const defaultFontName = "BeVietnamPro-SemiBold";
+const defaultFontName = "Arial";
 const defaultPathFontName = `${__dirname}/assets/font/BeVietnamPro-SemiBold.ttf`;
 const { randomString } = global.utils;
 const percentage = total => total / 100;
 
-Canvas.registerFont(`${__dirname}/assets/font/BeVietnamPro-Bold.ttf`, {
-	family: "BeVietnamPro-Bold"
-});
-Canvas.registerFont(defaultPathFontName, {
-	family: defaultFontName
-});
+try {
+	Canvas.registerFont(`${__dirname}/assets/font/BeVietnamPro-Bold.ttf`, {
+		family: "BeVietnamPro-Bold"
+	});
+	Canvas.registerFont(defaultPathFontName, {
+		family: "BeVietnamPro-SemiBold"
+	});
+}
+catch (_e) {
+	// Ignore font registration errors; rank card uses safe fallback font below.
+}
 
 let deltaNext;
 const expToLevel = (exp, deltaNextLevel = deltaNext) => Math.floor((1 + Math.sqrt(1 + 8 * exp / deltaNextLevel)) / 2);
@@ -206,7 +211,7 @@ class RankCard {
 		this.exp_color = "#e1e1e1";
 		this.expNextLevel_color = "#3f3f3f";
 		this.text_color = "#000000";
-		this.fontName = "BeVietnamPro-Bold";
+		this.fontName = defaultFontName;
 		this.textSize = 0;
 
 		for (const key in options)

@@ -224,6 +224,18 @@ function checkAndTrimString(string) {
 	return string;
 }
 
+function normalizeOptionalString(value) {
+	if (typeof value !== "string")
+		return value;
+	const normalized = value.trim();
+	if (!normalized)
+		return null;
+	const lowered = normalized.toLowerCase();
+	if (lowered === "undefined" || lowered === "null")
+		return null;
+	return normalized;
+}
+
 function filterKeysAppState(appState) {
 	return appState.filter(item => ["c_user", "xs", "datr", "fr", "sb", "i_user"].includes(item.key));
 }
@@ -236,9 +248,91 @@ global.statusAccountBot = 'good';
 let changeFbStateByCode = false;
 let latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
 let dashBoardIsRunning = false;
+let browserRenewTimer = null;
+let bootRetryWithBrowserRenew = false;
 const dashboardFirstBoot = process.env.DASHBOARD_FIRST_BOOT === "1";
 let bootingBotFromTrigger = false;
 global.GoatBot.bootingBotFromTrigger = false;
+
+async function startBrowserRenewScheduler() {
+	try {
+		if (browserRenewTimer) {
+			clearTimeout(browserRenewTimer);
+			browserRenewTimer = null;
+		}
+
+		const renewCfg = global.GoatBot.config.facebookAccount?.browserRenew || {};
+		if (renewCfg.enable !== true)
+			return;
+
+		const intervalMinutes = Number(renewCfg.intervalMinutes);
+		if (!intervalMinutes || intervalMinutes < 1) {
+			log.warn("BROWSER_RENEW", "browserRenew.intervalMinutes must be >= 1");
+			return;
+		}
+		let consecutiveFailures = 0;
+		const baseIntervalMs = intervalMinutes * 60 * 1000;
+		const maxBackoffMs = Math.max(baseIntervalMs * 8, 30 * 60 * 1000);
+
+		const renew = require("./browserSessionRenew.js");
+		const scheduleNext = (delayMs) => {
+			if (browserRenewTimer)
+				clearTimeout(browserRenewTimer);
+			browserRenewTimer = setTimeout(runRenew, delayMs);
+		};
+
+		const runRenew = async () => {
+			try {
+				const result = await renew({
+					profileDir: renewCfg.profileDir || `${process.cwd()}/.browser-profile`,
+					accountFile: dirAccount,
+					userAgent: global.GoatBot.config.facebookAccount?.userAgent,
+					headless: renewCfg.headless !== false,
+					homeUrl: renewCfg.homeUrl || "https://m.facebook.com/",
+					navTimeoutMs: Number(renewCfg.navTimeoutMs) || 90000
+				});
+
+				if (result.success) {
+					consecutiveFailures = 0;
+					changeFbStateByCode = true;
+					latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
+					setTimeout(() => changeFbStateByCode = false, 1000);
+					log.info("BROWSER_RENEW", `Appstate renewed from browser profile (${result.count} cookies)`);
+					if (result.seededFromAccount)
+						log.info("BROWSER_RENEW", "Session was seeded from account.txt cookies before refresh");
+					if (result.navigationErrors?.length)
+						log.warn("BROWSER_RENEW", `Navigation warnings: ${result.navigationErrors.join(" | ")}`);
+					scheduleNext(baseIntervalMs);
+				}
+				else {
+					consecutiveFailures++;
+					log.warn("BROWSER_RENEW", result.reason || "Renew skipped");
+					if (result.navigationErrors?.length)
+						log.warn("BROWSER_RENEW", `Navigation errors: ${result.navigationErrors.join(" | ")}`);
+					const backoff = Math.min(baseIntervalMs * (2 ** Math.min(consecutiveFailures, 3)), maxBackoffMs);
+					log.warn("BROWSER_RENEW", `Retrying in ${Math.ceil(backoff / 60000)} minute(s)`);
+					scheduleNext(backoff);
+				}
+			}
+			catch (err) {
+				consecutiveFailures++;
+				log.warn("BROWSER_RENEW", err.message || String(err));
+				const backoff = Math.min(baseIntervalMs * (2 ** Math.min(consecutiveFailures, 3)), maxBackoffMs);
+				log.warn("BROWSER_RENEW", `Retrying in ${Math.ceil(backoff / 60000)} minute(s)`);
+				scheduleNext(backoff);
+			}
+		};
+
+		if (renewCfg.runOnBoot === true)
+			await runRenew();
+		else
+			scheduleNext(baseIntervalMs);
+		log.info("BROWSER_RENEW", `Enabled every ${intervalMinutes} minute(s) with adaptive backoff`);
+	}
+	catch (err) {
+		log.warn("BROWSER_RENEW", err.message || String(err));
+	}
+}
 
 async function startDashboardServer(api = null) {
 	if (global.GoatBot.config.dashBoard?.enable !== true)
@@ -264,7 +358,43 @@ async function triggerBotStart(loginWithEmail) {
 	global.GoatBot.bootingBotFromTrigger = true;
 	try {
 		await startBot(loginWithEmail);
+		bootRetryWithBrowserRenew = false;
 		return true;
+	}
+	catch (err) {
+		log.err("BOOT", "Bot startup failed", err);
+		try {
+			const renewCfg = global.GoatBot.config.facebookAccount?.browserRenew || {};
+			if (renewCfg.enable === true && !bootRetryWithBrowserRenew) {
+				bootRetryWithBrowserRenew = true;
+				log.warn("BOOT", "Attempting one-time browser renew before retrying startup");
+				const renew = require("./browserSessionRenew.js");
+				const result = await renew({
+					profileDir: renewCfg.profileDir || `${process.cwd()}/.browser-profile`,
+					accountFile: dirAccount,
+					userAgent: global.GoatBot.config.facebookAccount?.userAgent,
+					headless: renewCfg.headless !== false,
+					homeUrl: renewCfg.homeUrl || "https://m.facebook.com/",
+					navTimeoutMs: Number(renewCfg.navTimeoutMs) || 90000
+				});
+				if (result.success) {
+					changeFbStateByCode = true;
+					latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
+					setTimeout(() => changeFbStateByCode = false, 1000);
+					log.info("BOOT", "Browser renew succeeded, retrying bot startup");
+					await startBot(loginWithEmail);
+					bootRetryWithBrowserRenew = false;
+					return true;
+				}
+				log.warn("BOOT", result.reason || "Browser renew failed during startup retry");
+			}
+		}
+		catch (retryErr) {
+			log.warn("BOOT", `Startup retry with browser renew failed: ${retryErr.message || String(retryErr)}`);
+		}
+		if (global.GoatBot.config.dashBoard?.enable === true)
+			await startDashboardServer(null);
+		return false;
 	}
 	finally {
 		bootingBotFromTrigger = false;
@@ -274,13 +404,16 @@ async function triggerBotStart(loginWithEmail) {
 
 
 async function getAppStateFromEmail(spin = { _start: () => { }, _stop: () => { } }, facebookAccount) {
-	const { email, password, userAgent, proxy } = facebookAccount;
+	const email = checkAndTrimString(facebookAccount.email);
+	const password = checkAndTrimString(facebookAccount.password);
+	const userAgent = normalizeOptionalString(facebookAccount.userAgent) || undefined;
+	const proxy = normalizeOptionalString(facebookAccount.proxy) || null;
 	const getFbstate = require(process.env.NODE_ENV === 'development' ? "./getFbstate1.dev.js" : "./getFbstate1.js");
 	let code2FATemp;
 	let appState;
 	try {
 		try {
-			appState = await getFbstate(checkAndTrimString(email), checkAndTrimString(password), userAgent, proxy);
+			appState = await getFbstate(email, password, userAgent, proxy);
 			spin._stop();
 		}
 		catch (err) {
@@ -354,6 +487,25 @@ async function getAppStateFromEmail(spin = { _start: () => { }, _stop: () => { }
 		}
 	}
 	catch (err) {
+		log.warn("LOGIN FACEBOOK", `Primary email login failed (${err.name || "ERROR"}): ${err.message || String(err)}`);
+		if (err?.meta) {
+			log.warn("LOGIN FACEBOOK", `Primary login context: ${JSON.stringify(err.meta)}`);
+		}
+
+		// Do not call mbasic fallback for known auth/checkpoint failures.
+		// The fallback path is unreliable in this build and can mask real errors.
+		const nonRecoverablePrimaryErrors = new Set([
+			"LOGIN_FAILED",
+			"WRONG_ACCOUNT",
+			"OLD_PASSWORD",
+			"LOGIN_APPROVED_REQUIRE",
+			"2FA_CODE_REQUIRED",
+			"2FA_CODE_INVALID"
+		]);
+		if (nonRecoverablePrimaryErrors.has(err?.name) || String(err?.message || "").includes("checkpoint")) {
+			throw err;
+		}
+
 		const loginMbasic = require(process.env.NODE_ENV === 'development' ? "./loginMbasic.dev.js" : "./loginMbasic.js");
 		if (facebookAccount["2FASecret"]) {
 			switch (['.png', '.jpg', '.jpeg'].some(i => facebookAccount["2FASecret"].endsWith(i))) {
@@ -366,13 +518,23 @@ async function getAppStateFromEmail(spin = { _start: () => { }, _stop: () => { }
 			}
 		}
 
-		appState = await loginMbasic({
+		const mbasicOptions = {
 			email,
 			pass: password,
 			twoFactorSecretOrCode: code2FATemp,
-			userAgent,
-			proxy
-		});
+			// loginMbasic internals may append proxy directly into host;
+			// force empty string instead of undefined to avoid "...undefined" hostname.
+			proxy: proxy || ""
+		};
+		if (userAgent)
+			mbasicOptions.userAgent = userAgent;
+		try {
+			appState = await loginMbasic(mbasicOptions);
+		}
+		catch (mbasicErr) {
+			log.warn("LOGIN FACEBOOK", `Fallback mbasic login failed (${mbasicErr.name || "ERROR"}): ${mbasicErr.message || String(mbasicErr)}`);
+			throw mbasicErr;
+		}
 
 		appState = appState.map(item => {
 			item.key = item.name;
@@ -528,7 +690,10 @@ async function getAppStateToLogin(loginWithEmail) {
 					}))
 					.filter(i => i.key && i.value && i.key != "x-referer");
 			}
-			if (!await checkLiveCookie(appState.map(i => i.key + "=" + i.value).join("; "), facebookAccount.userAgent)) {
+			if (!await checkLiveCookie(
+				appState.map(i => i.key + "=" + i.value).join("; "),
+				normalizeOptionalString(facebookAccount.userAgent) || undefined
+			)) {
 				const error = new Error("Cookie is invalid");
 				error.name = "COOKIE_INVALID";
 				throw error;
@@ -537,10 +702,8 @@ async function getAppStateToLogin(loginWithEmail) {
 	}
 	catch (err) {
 		spin && spin._stop();
-		let {
-			email,
-			password
-		} = facebookAccount;
+		let email = normalizeOptionalString(facebookAccount.email);
+		let password = normalizeOptionalString(facebookAccount.password);
 		if (err.name === "TOKEN_ERROR")
 			log.err("LOGIN FACEBOOK", getText('login', 'tokenError', colors.green("EAAAA..."), colors.green(dirAccount)));
 		else if (err.name === "COOKIE_INVALID")
@@ -1164,6 +1327,7 @@ async function startBot(loginWithEmail) {
 				}, restartListenMqtt.timeRestart);
 				global.intervalRestartListenMqtt = restart;
 			}
+			await startBrowserRenewScheduler();
 			require('../autoUptime.js');
 		});
 	})(appState);

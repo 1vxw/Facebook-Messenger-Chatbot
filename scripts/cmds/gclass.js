@@ -13,7 +13,7 @@ const {
 	removeUserToken,
 	getClientsForUser,
 	exchangeAuthCodeForUser
-} = require("./gclassAuth");
+} = require("./helpers/gclassAuth");
 
 const DOWNLOAD_DIR = path.join(__dirname, "tmp", "classroom");
 

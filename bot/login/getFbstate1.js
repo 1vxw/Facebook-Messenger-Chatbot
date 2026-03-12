@@ -7,13 +7,6 @@ const urlLoginCheckpoint = "https://m.facebook.com/login/checkpoint/?next=https:
 const headers = {
 	"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
 	"accept-language": "vi,en-US;q=0.9,en;q=0.8",
-	"sec-ch-ua": "\" Not;A Brand\";v=\"99\", \"Microsoft Edge\";v=\"103\", \"Chromium\";v=\"103\"",
-	"sec-ch-ua-mobile": "?0",
-	"sec-ch-ua-platform": "\"Windows\"",
-	"sec-fetch-dest": "document",
-	"sec-fetch-mode": "navigate",
-	"sec-fetch-site": "none",
-	"sec-fetch-user": "?1",
 	"upgrade-insecure-requests": "1",
 	"user-agent": "Mozilla/5.0 (Linux; Android 12; M2102J20SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.0.0 Mobile Safari/537.36"
 };
@@ -36,6 +29,67 @@ async function checkAndSaveCookies(jar, headers, request) {
 	else {
 		return jar.getCookies(targetCookie);
 	}
+}
+
+function extractLoginFailureHint(html = "") {
+	const source = String(html || "");
+	if (!source)
+		return "";
+
+	let title = "";
+	let bodyText = "";
+	try {
+		const $ = cheerio.load(source);
+		title = ($("title").text() || "").trim().toLowerCase();
+		bodyText = ($("body").text() || "").replace(/\s+/g, " ").trim().toLowerCase();
+	}
+	catch (_e) {
+		bodyText = source.toLowerCase();
+	}
+
+	const pageText = `${title} ${bodyText}`;
+	const hasCheckpointForm = /\/checkpoint\/\?/.test(source) || /class="checkpoint"/i.test(source);
+	if (hasCheckpointForm || /checkpoint/.test(title))
+		return "Facebook checkpoint is required. Complete it in browser first.";
+	if (/login approval needed/.test(pageText))
+		return "Login approval needed on Facebook. Approve this device/session first.";
+	if (/enter login code|two-factor authentication|approvals_code/.test(pageText))
+		return "2FA challenge detected. Submit valid 2FA code/secret.";
+	if (/save browser|save device|this was me/.test(pageText))
+		return "Facebook asks you to confirm this login/device first.";
+	if (/incorrect password|wrong credentials|invalid username or password/.test(pageText))
+		return "Invalid email/password.";
+	if (/suspicious|unusual|secure your account/.test(pageText))
+		return "Facebook flagged unusual activity for this login.";
+	if (/login|log into facebook/.test(title))
+		return "Facebook redirected back to login page (session not accepted).";
+	return "";
+}
+
+function summarizeLoginResponse(res = {}) {
+	const html = String(res.body || "");
+	let title = "";
+	let hasCheckpointForm = false;
+	let hasLoginForm = false;
+	let has2FAField = false;
+	try {
+		const $ = cheerio.load(html);
+		title = ($("title").text() || "").trim();
+		hasCheckpointForm = $('form.checkpoint, form[class*="checkpoint"]').length > 0;
+		hasLoginForm = $('#login_form, form[action*="/login/"]').length > 0;
+		has2FAField = $('input[name="approvals_code"]').length > 0;
+	}
+	catch (_e) {}
+
+	return {
+		url: res?.request?.uri?.href || "",
+		path: res?.request?.uri?.path || "",
+		statusCode: res?.statusCode || 0,
+		title,
+		hasCheckpointForm,
+		hasLoginForm,
+		has2FAField
+	};
 }
 
 
@@ -224,8 +278,13 @@ module.exports = async function (email, pass, userAgent, proxy) {
 		};
 	}
 
-	const error = new Error("Can't login to Facebook, please login to your account to check and fix this problem");
+	const hint = extractLoginFailureHint(res3.body);
+	const error = new Error(
+		hint ?
+			`Can't login to Facebook. ${hint}` :
+			"Can't login to Facebook, please login to your account to check and fix this problem"
+	);
 	error.name = "LOGIN_FAILED";
-	error.response = res3;
+	error.meta = summarizeLoginResponse(res3);
 	throw error;
 };

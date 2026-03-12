@@ -44,6 +44,7 @@
     "passport-local": "^1.0.0",
     "path": "^0.12.7",
     "pdfkit": "^0.17.2",
+    "playwright": "^1.58.2",
     "qrcode-reader": "^1.0.4",
     "qs": "^6.11.0",
     "request": "^2.88.2",

@@ -21,7 +21,7 @@ const {
 	createOAuthClient,
 	getUserToken: getGclassUserToken,
 	setUserToken: setGclassUserToken
-} = require("../scripts/cmds/gclassAuth.js");
+} = require("../scripts/cmds/helpers/gclassAuth.js");
 const server = http.createServer(app);
 
 const imageExt = ["png", "gif", "webp", "jpeg", "jpg"];
