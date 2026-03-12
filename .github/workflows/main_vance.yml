@@ -63,11 +63,33 @@ jobs:
       - name: Delay to avoid SCM restart race
         run: sleep 20
       
-      - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
+      - name: Deploy to Azure Web App (attempt 1)
+        id: deploy_attempt_1
         uses: azure/webapps-deploy@v3
+        continue-on-error: true
         with:
           app-name: 'vance'
           slot-name: 'Production'
           package: release.zip
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4039FC4023204AF0BCBF4E6713A81172 }}
+
+      - name: Wait before retry after conflict
+        if: steps.deploy_attempt_1.outcome == 'failure'
+        run: sleep 45
+
+      - name: Deploy to Azure Web App (attempt 2)
+        if: steps.deploy_attempt_1.outcome == 'failure'
+        id: deploy_attempt_2
+        uses: azure/webapps-deploy@v3
+        continue-on-error: true
+        with:
+          app-name: 'vance'
+          slot-name: 'Production'
+          package: release.zip
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_4039FC4023204AF0BCBF4E6713A81172 }}
+
+      - name: Fail if deploy still unsuccessful
+        if: steps.deploy_attempt_1.outcome == 'failure' && steps.deploy_attempt_2.outcome == 'failure'
+        run: |
+          echo "Deploy failed after retry (likely persistent OneDeploy lock/conflict)."
+          exit 1
