@@ -8,6 +8,7 @@ const OAUTH_SCOPES = [
 	"https://www.googleapis.com/auth/drive.file",
 	"https://www.googleapis.com/auth/drive.readonly",
 	"https://www.googleapis.com/auth/classroom.courses.readonly",
+	"https://www.googleapis.com/auth/classroom.rosters.readonly",
 	"https://www.googleapis.com/auth/classroom.coursework.me.readonly",
 	"https://www.googleapis.com/auth/classroom.coursework.me",
 	"https://www.googleapis.com/auth/classroom.student-submissions.me.readonly"

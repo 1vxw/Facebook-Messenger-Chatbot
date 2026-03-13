@@ -1089,10 +1089,32 @@ async function startBot(loginWithEmail) {
 			// ——————————————————————————————————————————————————— //
 			const { restartListenMqtt } = global.GoatBot.config;
 			let intervalCheckLiveCookieAndRelogin = false;
+			function isLoginBlockedError(err) {
+				if (!err)
+					return false;
+				if (typeof err === "string")
+					return err.includes("login_blocked") || err.includes("auth_error");
+				const errText = JSON.stringify(err);
+				return errText.includes("login_blocked")
+					|| errText.includes("\"reason\":\"auth_error\"")
+					|| errText.includes("\"type\":\"account_inactive\"");
+			}
 			// —————————————————— CALLBACK LISTEN —————————————————— //
 			async function callBackListen(error, event) {
 				if (error) {
 					global.responseUptimeCurrent = responseUptimeError;
+					if (isLoginBlockedError(error)) {
+						global.statusAccountBot = "login_blocked";
+						restartListenMqtt.enable = false;
+						if (global.intervalRestartListenMqtt)
+							clearInterval(global.intervalRestartListenMqtt);
+						log.err("LISTEN_MQTT", "Facebook auth blocked (login_blocked). Auto-restart paused. Inject fresh trusted appstate/cookies, then start bot.");
+						if (!isSendNotiErrorMessage) {
+							await handlerWhenListenHasError({ api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, error });
+							isSendNotiErrorMessage = true;
+						}
+						return;
+					}
 					if (
 						error.error == "Not logged in" ||
 						error.error == "Not logged in." ||
