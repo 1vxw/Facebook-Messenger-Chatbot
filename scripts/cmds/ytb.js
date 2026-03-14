@@ -5,6 +5,7 @@ const path = require("path");
 const ffmpegPath = require("ffmpeg-static");
 const youtubedl = require("youtube-dl-exec");
 const { getStreamFromURL, downloadFile, formatNumber } = global.utils;
+const YTB_MAX_CONCURRENT_CONVERSIONS = 2;
 async function getStreamAndSize(url, path = "") {
 	if (!url || typeof url !== "string") {
 		const error = new Error("Invalid media URL");
@@ -175,6 +176,10 @@ async function handle({ type, infoVideo, message, getLang }) {
 	const { title, videoId } = infoVideo;
 
 	if (type == "video") {
+		const releaseSlot = acquireYtbSlot();
+		if (!releaseSlot)
+			return message.reply(getLang("error", `YTB is busy now (max ${YTB_MAX_CONCURRENT_CONVERSIONS} conversions at once). Please try again in a moment.`));
+
 		const MAX_SIZE = 83 * 1024 * 1024; // 83MB (max size of video that can be sent on fb)
 		const msgSend = message.reply(getLang("downloading", getLang("video"), title));
 		let videoPath;
@@ -182,23 +187,35 @@ async function handle({ type, infoVideo, message, getLang }) {
 			videoPath = await downloadVideoWithYtDlp(videoId, MAX_SIZE);
 		}
 		catch (err) {
+			releaseSlot();
 			return message.reply(getLang("error", "Failed to convert video from YouTube right now. Please try again later."));
 		}
-		if (!videoPath)
+		if (!videoPath) {
+			releaseSlot();
 			return message.reply(getLang("noVideo"));
+		}
+
+		const sizeMB = getFileSizeMB(videoPath);
 
 		message.reply({
-			body: title,
+			body: `${title}\nSize: ${sizeMB} MB`,
 			attachment: fs.createReadStream(videoPath)
 		}, async (err) => {
-			if (err)
+			if (err) {
+				releaseSlot();
 				return message.reply(getLang("error", err.message));
+			}
 			if (videoPath && fs.existsSync(videoPath))
 				fs.unlinkSync(videoPath);
 			message.unsend((await msgSend).messageID);
+			releaseSlot();
 		});
 	}
 	else if (type == "audio") {
+		const releaseSlot = acquireYtbSlot();
+		if (!releaseSlot)
+			return message.reply(getLang("error", `YTB is busy now (max ${YTB_MAX_CONCURRENT_CONVERSIONS} conversions at once). Please try again in a moment.`));
+
 		const MAX_SIZE = 27262976; // 26MB (max size of audio that can be sent on fb)
 		const msgSend = message.reply(getLang("downloading", getLang("audio"), title));
 		let audioPath;
@@ -206,20 +223,28 @@ async function handle({ type, infoVideo, message, getLang }) {
 			audioPath = await downloadAudioWithYtDlp(videoId, MAX_SIZE);
 		}
 		catch (err) {
+			releaseSlot();
 			return message.reply(getLang("error", "Failed to convert audio from YouTube right now. Please try again later."));
 		}
-		if (!audioPath)
+		if (!audioPath) {
+			releaseSlot();
 			return message.reply(getLang("noAudio"));
+		}
+
+		const sizeMB = getFileSizeMB(audioPath);
 
 		message.reply({
-			body: title,
+			body: `${title}\nSize: ${sizeMB} MB`,
 			attachment: fs.createReadStream(audioPath)
 		}, async (err) => {
-			if (err)
+			if (err) {
+				releaseSlot();
 				return message.reply(getLang("error", err.message));
+			}
 			if (audioPath && fs.existsSync(audioPath))
 				fs.unlinkSync(audioPath);
 			message.unsend((await msgSend).messageID);
+			releaseSlot();
 		});
 	}
 	else if (type == "info") {
@@ -246,6 +271,24 @@ async function handle({ type, infoVideo, message, getLang }) {
 			])
 		});
 	}
+}
+
+function acquireYtbSlot() {
+	if (!global.temp)
+		global.temp = {};
+	if (typeof global.temp.ytbActiveConversions !== "number")
+		global.temp.ytbActiveConversions = 0;
+	if (global.temp.ytbActiveConversions >= YTB_MAX_CONCURRENT_CONVERSIONS)
+		return null;
+	global.temp.ytbActiveConversions++;
+	return () => {
+		global.temp.ytbActiveConversions = Math.max(0, (global.temp.ytbActiveConversions || 1) - 1);
+	};
+}
+
+function getFileSizeMB(filePath) {
+	const size = fs.statSync(filePath).size || 0;
+	return (size / (1024 * 1024)).toFixed(2);
 }
 
 async function downloadAudioWithYtDlp(videoId, maxSize) {
