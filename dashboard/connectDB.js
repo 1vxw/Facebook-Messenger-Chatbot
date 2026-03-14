@@ -1,13 +1,17 @@
 const path = require("path");
+const applyRuntimeSecrets = require("../security/applyRuntimeSecrets.js");
 
 const dirConfig = path.join(`${__dirname}/../${process.env.NODE_ENV === 'development' ? 'config.dev.json' : 'config.json'}`);
 const dirConfigCommands = path.join(`${__dirname}/../${process.env.NODE_ENV === 'development' ? 'configCommands.dev.json' : 'configCommands.json'}`);
 
 const previousGoatBot = global.GoatBot || {};
+const runtimeConfig = require(dirConfig);
+const runtimeConfigCommands = require(dirConfigCommands);
+applyRuntimeSecrets(runtimeConfig, runtimeConfigCommands);
 global.GoatBot = {
 	...previousGoatBot,
-	config: require(dirConfig),
-	configCommands: require(dirConfigCommands),
+	config: runtimeConfig,
+	configCommands: runtimeConfigCommands,
 	reLoginBot: typeof previousGoatBot.reLoginBot === "function" ? previousGoatBot.reLoginBot : function () { },
 	__loginBootstrapReady: previousGoatBot.__loginBootstrapReady === true
 };

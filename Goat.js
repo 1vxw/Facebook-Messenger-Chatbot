@@ -9,6 +9,7 @@ const google = require("googleapis").google;
 const nodemailer = require("nodemailer");
 const log = require('./logger/log.js');
 const path = require("path");
+const applyRuntimeSecrets = require("./security/applyRuntimeSecrets.js");
 
 process.env.BLUEBIRD_W_FORGOTTEN_RETURN = 0; // Disable warning: "Warning: a promise was created in a handler but was not returned from it"
 
@@ -48,6 +49,7 @@ const config = require(dirConfig);
 if (config.whiteListMode?.whiteListIds && Array.isArray(config.whiteListMode.whiteListIds))
 	config.whiteListMode.whiteListIds = config.whiteListMode.whiteListIds.map(id => id.toString());
 const configCommands = require(dirConfigCommands);
+applyRuntimeSecrets(config, configCommands);
 
 global.GoatBot = {
 	startTime: Date.now() - process.uptime() * 1000, // time start bot (ms)
@@ -156,6 +158,7 @@ const watchAndReloadConfig = (dir, type, prop, logName) => {
 						return;
 					}
 					global.GoatBot[prop] = JSON.parse(fs.readFileSync(dir, 'utf-8'));
+					applyRuntimeSecrets(global.GoatBot.config, global.GoatBot.configCommands);
 					log.success(logName, `Reloaded ${dir.replace(process.cwd(), "")}`);
 				}
 				catch (err) {

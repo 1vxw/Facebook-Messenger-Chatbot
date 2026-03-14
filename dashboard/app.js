@@ -175,19 +175,25 @@ module.exports = async (api) => {
 		dashBoardData
 	} = global.db;
 
-	// Ensure hardcoded dashboard credentials exist for single-admin operation.
+	// Bootstrap the first admin only from environment variables.
 	try {
 		const adminUser = await dashBoardData.get("admin");
 		if (!adminUser) {
-			const bcrypt = require("bcrypt");
-			await dashBoardData.create({
-				email: "admin",
-				name: "Administrator",
-				password: bcrypt.hashSync("admin", 10),
-				facebookUserID: config.adminBot?.[0] || "",
-				isAdmin: true
-			});
-			utils.log.warn("DASHBOARD", "Created default dashboard credentials: admin/admin");
+			const bootstrapEmail = String(process.env.DASHBOARD_ADMIN_USER || "").trim();
+			const bootstrapPassword = String(process.env.DASHBOARD_ADMIN_PASSWORD || "").trim();
+			if (bootstrapEmail && bootstrapPassword) {
+				await dashBoardData.create({
+					email: bootstrapEmail,
+					name: "Administrator",
+					password: bcrypt.hashSync(bootstrapPassword, 10),
+					facebookUserID: config.adminBot?.[0] || "",
+					isAdmin: true
+				});
+				utils.log.warn("DASHBOARD", `Created bootstrap dashboard admin from environment user "${bootstrapEmail}"`);
+			}
+			else {
+				utils.log.warn("DASHBOARD", "No admin account found. Set DASHBOARD_ADMIN_USER and DASHBOARD_ADMIN_PASSWORD, then restart.");
+			}
 		}
 	}
 	catch (e) {
@@ -212,12 +218,15 @@ module.exports = async (api) => {
 	app.use(bodyParser.json());
 	app.use(bodyParser.urlencoded({ extended: true }));
 	app.use(cookieParser());
+	app.set("trust proxy", 1);
+	const secureSessionCookie = process.env.NODE_ENV === "production" || String(process.env.SESSION_COOKIE_SECURE || "").toLowerCase() === "true";
 	app.use(session({
-		secret: randomStringApikey(10),
+		secret: process.env.SESSION_SECRET || randomStringApikey(32),
 		resave: false,
 		saveUninitialized: true,
 		cookie: {
-			secure: false,
+			secure: secureSessionCookie,
+			sameSite: "lax",
 			httpOnly: true,
 			maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
 		}

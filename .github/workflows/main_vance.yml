@@ -40,8 +40,10 @@ jobs:
         run: |
           zip -r release.zip . \
             -x ".git/*" ".github/*" ".vscode/*" \
+               ".browser-profile/*" ".api.env" \
+               "account*.txt" \
                "temp/*" "runlog*" "start.out*" \
-               "*.log" "*.sqlite-shm" "*.sqlite-wal"
+               "*.log" "*.sqlite" "*.sqlite-shm" "*.sqlite-wal"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4

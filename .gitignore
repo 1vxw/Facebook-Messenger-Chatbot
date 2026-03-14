@@ -13,6 +13,16 @@ checkOriginCodeChanged.js
 *.test.*
 test.js
 .env
+.api.env
+.browser-profile/
+account.txt
+account.dev.txt
+config.dev.json
+configCommands.dev.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+Fca_Database/
 
 database/data/*
 !database/data/.gitkeep
