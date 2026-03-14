@@ -1,0 +1,59 @@
+{
+  "commandBanned": {},
+  "envGlobal": {
+    "weatherApiKey": "",
+    "goatbotApikey": ""
+  },
+  "envCommands": {
+    "daily": {
+      "rewardFirstDay": {
+        "coin": 100,
+        "exp": 10
+      }
+    },
+    "notification": {
+      "delayPerGroup": 250
+    },
+    "rank": {
+      "deltaNext": 5
+    },
+    "rankup": {
+      "deltaNext": 5
+    },
+    "appstore": {
+      "limitResult": 3
+    },
+    "dhbc": {
+      "reward": 1000
+    },
+    "vance": {
+      "apiKey": "",
+      "model": "llama-3.1-8b-instant"
+    },
+    "vancetest": {
+      "apiKey": "",
+      "model": "llama-3.1-8b-instant",
+      "limitThreads": 200,
+      "limitUsers": 500
+    },
+    "cm": {
+      "apiKey": "",
+      "model": "llama-3.1-8b-instant",
+      "limitThreads": 200,
+      "limitUsers": 500
+    },
+    "croom": {
+      "apiKey": "",
+      "model": "llama-3.1-8b-instant"
+    },
+    "gclass": {
+      "apiKey": "",
+      "model": "llama-3.1-8b-instant"
+    }
+  },
+  "envEvents": {
+    "logsbot": {
+      "allow": true
+    }
+  }
+}
