@@ -13,7 +13,6 @@ function startProject() {
 		shell: true,
 		env: {
 			...process.env,
-			// Default to dashboard-first boot so secrets can be injected before bot login starts.
 			DASHBOARD_FIRST_BOOT: process.env.DASHBOARD_FIRST_BOOT || "1"
 		}
 	});
