@@ -33,8 +33,11 @@ jobs:
           test -f package-lock.json
 
       - name: Install production dependencies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          npm ci --omit=dev
+          npm ci --omit=dev --no-audit || npm ci --omit=dev --no-audit || npm ci --omit=dev --no-audit
 
       - name: Create deployment package
         run: |
