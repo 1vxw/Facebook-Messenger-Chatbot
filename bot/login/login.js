@@ -981,15 +981,31 @@ async function startBot(loginWithEmail) {
 				process.exit();
 			}
 			// ———————————————— NOTIFICATIONS ———————————————— //
-			let notification;
+			let notification = "";
 			try {
-				const getNoti = await axios.get("https://raw.githubusercontent.com/ntkhang03/Goat-Bot-V2-Gban/master/notification.txt");
-				notification = getNoti.data;
+				const isLocalRuntime = process.env.NODE_ENV === "development"
+					|| /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(String(process.env.PUBLIC_URL || ""))
+					|| /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(String(global.GoatBot.dashboardPublicBaseUrl || ""));
+				const localPort = global.GoatBot.config?.dashBoard?.port || global.GoatBot.config?.serverUptime?.port || 3001;
+				const candidates = isLocalRuntime
+					? [
+						`http://localhost:${localPort}/api/notifications`,
+						`http://127.0.0.1:${localPort}/api/notifications`,
+						"https://vance.api-vincepradas.site/api/notifications"
+					]
+					: ["https://vance.api-vincepradas.site/api/notifications"];
+
+				for (const endpoint of candidates) {
+					try {
+						const getNoti = await axios.get(endpoint, { timeout: 10000 });
+						notification = String(getNoti.data || "").trim();
+						if (notification)
+							break;
+					}
+					catch (_e) {}
+				}
 			}
-			catch (err) {
-				log.err("ERROR", "Can't get notifications data");
-				process.exit();
-			}
+			catch (_err) {}
 			if (global.GoatBot.config.autoRefreshFbstate == true) {
 				changeFbStateByCode = true;
 				try {
@@ -1093,7 +1109,7 @@ async function startBot(loginWithEmail) {
 			log.master("LOAD TIME", `${convertTime(Date.now() - global.GoatBot.startTime)}`);
 			logColor("#f5ab00", createLine("COPYRIGHT"));
 			// —————————————————— COPYRIGHT INFO —————————————————— //
-			// console.log(`\x1b[1m\x1b[33mCOPYRIGHT:\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36mProject VXW v2 created by ntkhang03 (https://github.com/1vxw), please do not sell this source code or claim it as your own. Thank you!\x1b[0m`);
+			// console.log(`\x1b[1m\x1b[33mCOPYRIGHT:\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36mProject VXW v2 created by Vince Pradas (https://github.com/1vxw), please do not sell this source code or claim it as your own. Thank you!\x1b[0m`);
 			console.log(`\x1b[1m\x1b[33m${("COPYRIGHT:")}\x1b[0m\x1b[1m\x1b[37m \x1b[0m\x1b[1m\x1b[36m${("Project VXW created by Vince Pradas (https://github.com/1vxw). Please do not sell this source code or claim it as your own.")}\x1b[0m`);
 			logColor("#f5ab00", character);
 			global.GoatBot.config.adminBot = adminBot;

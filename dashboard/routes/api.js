@@ -2,10 +2,30 @@ const stream = require("stream");
 const express = require("express");
 const path = require("path");
 const mimeDB = require("mime-db");
+const packageJson = require("../../package.json");
 const router = express.Router();
 
 module.exports = function ({ isAuthenticated, isVeryfiUserIDFacebook, checkHasAndInThread, threadsData, drive, checkAuthConfigDashboardOfThread, usersData, createLimiter, middlewareCheckAuthConfigDashboardOfThread, isVideoFile }) {
 	const apiLimiter = createLimiter(1000 * 60 * 5, 10);
+	const normalizeRepoUrl = (url) => String(url || "")
+		.replace(/^git\+/, "")
+		.replace(/\.git$/, "")
+		.trim();
+
+	router.get("/notifications", function (_req, res) {
+		const version = String(packageJson?.version || "unknown");
+		const repositoryUrl = normalizeRepoUrl(
+			packageJson?.repository?.url
+			|| packageJson?.homepage
+			|| ""
+		);
+		const text = [
+			`Current version: ${version}`,
+			`GitHub repository: ${repositoryUrl || "not configured"}`
+		].join("\n");
+
+		return res.status(200).type("text/plain").send(text);
+	});
 
 	router
 		.post("/delete/:slug", [isAuthenticated, isVeryfiUserIDFacebook, checkHasAndInThread, middlewareCheckAuthConfigDashboardOfThread, apiLimiter], async function (req, res) {
