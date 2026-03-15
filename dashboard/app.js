@@ -22,6 +22,7 @@ const {
 	getUserToken: getGclassUserToken,
 	setUserToken: setGclassUserToken
 } = require("../scripts/cmds/helpers/gclassAuth.js");
+const { verifyConnectState } = require("../scripts/cmds/helpers/gclassConnectState.js");
 const server = http.createServer(app);
 
 const imageExt = ["png", "gif", "webp", "jpeg", "jpg"];
@@ -556,18 +557,33 @@ module.exports = async (api) => {
 
 	app.get("/gclass/connect", async (req, res) => {
 		try {
-			const token = String(req.query.token || "").trim();
-			const senderID = String(req.query.sid || "").trim();
-			if (!token || !senderID)
-				return res.status(400).send("Invalid connect link");
+			const state = String(req.query.state || "").trim();
+			let senderID = "";
+			let finalState = state;
 
-			const sessions = getGclassConnectSessions();
-			const pending = sessions[token];
-			if (!pending || String(pending.senderID) !== senderID)
-				return res.status(400).send("Connect link is invalid");
-			if (Number(pending.expiresAt || 0) <= Date.now()) {
-				delete sessions[token];
-				return res.status(400).send("Connect link expired. Please run gclass connect again.");
+			if (state) {
+				const parsed = verifyConnectState(state);
+				if (!parsed.ok)
+					return res.status(400).send("Connect link expired or invalid. Please run gclass connect again.");
+				senderID = String(parsed.sid);
+			}
+			else {
+				// Backward compatibility for old sid/token links.
+				const token = String(req.query.token || "").trim();
+				const sid = String(req.query.sid || "").trim();
+				if (!token || !sid)
+					return res.status(400).send("Invalid connect link");
+
+				const sessions = getGclassConnectSessions();
+				const pending = sessions[token];
+				if (!pending || String(pending.senderID) !== sid)
+					return res.status(400).send("Connect link is invalid");
+				if (Number(pending.expiresAt || 0) <= Date.now()) {
+					delete sessions[token];
+					return res.status(400).send("Connect link expired. Please run gclass connect again.");
+				}
+				senderID = sid;
+				finalState = token;
 			}
 
 			const redirectUri = getGclassRedirectUri(req);
@@ -576,7 +592,7 @@ module.exports = async (api) => {
 				access_type: "offline",
 				prompt: "consent",
 				scope: OAUTH_SCOPES,
-				state: token
+				state: finalState
 			});
 			return res.redirect(authUrl);
 		}
@@ -592,32 +608,40 @@ module.exports = async (api) => {
 		try {
 			const oauthError = String(req.query.error || "").trim();
 			const code = String(req.query.code || "").trim();
-			const stateToken = String(req.query.state || "").trim();
-			if (oauthError)
-				return res.status(400).send(html("Google connect failed", `Error: ${oauthError}`));
-			if (!code || !stateToken)
-				return res.status(400).send(html("Google connect failed", "Missing callback parameters."));
+				const stateToken = String(req.query.state || "").trim();
+				if (oauthError)
+					return res.status(400).send(html("Google connect failed", `Error: ${oauthError}`));
+				if (!code || !stateToken)
+					return res.status(400).send(html("Google connect failed", "Missing callback parameters."));
 
-			const sessions = getGclassConnectSessions();
-			const pending = sessions[stateToken];
-			if (!pending)
-				return res.status(400).send(html("Google connect failed", "Session not found or expired."));
-			if (Number(pending.expiresAt || 0) <= Date.now()) {
-				delete sessions[stateToken];
-				return res.status(400).send(html("Google connect failed", "Session expired. Run gclass connect again."));
-			}
+				let senderID = "";
+				const parsed = verifyConnectState(stateToken);
+				if (parsed.ok) {
+					senderID = String(parsed.sid);
+				}
+				else {
+					// Backward compatibility for old memory-session state tokens.
+					const sessions = getGclassConnectSessions();
+					const pending = sessions[stateToken];
+					if (!pending)
+						return res.status(400).send(html("Google connect failed", "Session not found or expired."));
+					if (Number(pending.expiresAt || 0) <= Date.now()) {
+						delete sessions[stateToken];
+						return res.status(400).send(html("Google connect failed", "Session expired. Run gclass connect again."));
+					}
+					senderID = String(pending.senderID);
+					delete sessions[stateToken];
+				}
 
-			const senderID = String(pending.senderID);
-			const redirectUri = getGclassRedirectUri(req);
-			const oauth2 = createOAuthClient(redirectUri);
-			const { tokens } = await oauth2.getToken(code);
+				const redirectUri = getGclassRedirectUri(req);
+				const oauth2 = createOAuthClient(redirectUri);
+				const { tokens } = await oauth2.getToken(code);
 			if (!tokens?.refresh_token) {
 				const old = await getGclassUserToken(senderID);
 				if (old?.refresh_token)
 					tokens.refresh_token = old.refresh_token;
 			}
-			await setGclassUserToken(senderID, tokens);
-			delete sessions[stateToken];
+				await setGclassUserToken(senderID, tokens);
 
 			const botApi = api || global.GoatBot?.fcaApi;
 			if (botApi?.sendMessage) {

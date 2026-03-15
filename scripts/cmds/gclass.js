@@ -14,6 +14,7 @@ const {
 	getClientsForUser,
 	exchangeAuthCodeForUser
 } = require("./helpers/gclassAuth");
+const { createConnectState } = require("./helpers/gclassConnectState");
 
 const DOWNLOAD_DIR = path.join(__dirname, "tmp", "classroom");
 
@@ -70,15 +71,8 @@ function createConnectLink(senderID) {
 	const baseUrl = getPublicBaseUrl();
 	if (!baseUrl)
 		return null;
-
-	const token = crypto.randomBytes(24).toString("hex");
-	const sessions = ensureConnectSessions();
-	sessions[token] = {
-		senderID: String(senderID),
-		expiresAt: Date.now() + 10 * 60 * 1000
-	};
-
-	return `${baseUrl}/gclass/connect?sid=${encodeURIComponent(String(senderID))}&token=${encodeURIComponent(token)}`;
+	const state = createConnectState(senderID, 10 * 60 * 1000);
+	return `${baseUrl}/gclass/connect?state=${encodeURIComponent(state)}`;
 }
 
 function getConnectPrompt(getLang, senderID) {
