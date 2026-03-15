@@ -261,12 +261,12 @@ if (config.autoRestart) {
 		global.utils.sendMail = sendMail;
 		global.utils.transporter = transporter;
 	}
-	else {
-		log.warn("CREDENTIALS", "Gmail OAuth credentials are missing. Email notifications and mail-based dashboard flows are disabled.");
-		global.utils.sendMail = async () => {
-			throw new Error("Email is not configured. Set GMAIL_EMAIL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.");
-		};
-	}
+		else {
+			log.warn("CREDENTIALS", "Gmail OAuth credentials are missing. Set GMAIL_EMAIL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN in Azure App Settings (or config.json). Email notifications and mail-based dashboard flows are disabled.");
+			global.utils.sendMail = async () => {
+				throw new Error("Email is not configured. Set GMAIL_EMAIL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.");
+			};
+		}
 
 	// ———————————————— CHECK VERSION ———————————————— //
 	const { data: { version } } = await axios.get("https://raw.githubusercontent.com/ntkhang03/Goat-Bot-V2/main/package.json");
@@ -284,9 +284,9 @@ if (config.autoRestart) {
 		const parentIdGoogleDrive = await utils.drive.checkAndCreateParentFolder("GoatBot");
 		utils.drive.parentID = parentIdGoogleDrive;
 	}
-	else {
-		utils.log.warn("CREDENTIALS", "Google Drive integration disabled because Gmail OAuth credentials are missing.");
-	}
+		else {
+			utils.log.warn("CREDENTIALS", "Google Drive integration disabled because Gmail OAuth credentials are missing. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN in Azure App Settings.");
+		}
 	// ———————————————————— LOGIN ———————————————————— //
 	require(`./bot/login/login${NODE_ENV === 'development' ? '.dev.js' : '.js'}`);
 })();

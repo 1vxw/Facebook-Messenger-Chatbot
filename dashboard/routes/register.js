@@ -40,13 +40,21 @@ module.exports = function ({
 				});
 			}
 
-			const code = randomNumberApikey(6);
-			await transporter.sendMail({
-				from: "VXW",
-				to: email,
-				subject: "Verify your account",
-				html: generateEmailVerificationCode(code)
-			});
+				const code = randomNumberApikey(6);
+				try {
+					await transporter.sendMail({
+						from: "VXW",
+						to: email,
+						subject: "Verify your account",
+						html: generateEmailVerificationCode(code)
+					});
+				}
+				catch (_e) {
+					return res.status(400).send({
+						status: "error",
+						errors: [{ msg: "Cannot send verification email right now. Check Gmail OAuth credentials in Azure App Settings." }]
+					});
+				}
 
 			const hashPassword = bcrypt.hashSync(password, 10);
 			const user = {

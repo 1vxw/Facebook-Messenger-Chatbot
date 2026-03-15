@@ -20,7 +20,10 @@ const gmailAccount = config?.credentials?.gmailAccount || {};
 const { clientId, clientSecret, refreshToken, apiKey: googleApiKey } = gmailAccount;
 const hasGoogleDriveCredentials = !!(clientId && clientSecret && refreshToken);
 if (!hasGoogleDriveCredentials)
-	log.warn("CREDENTIALS", `Google Drive/Gmail credentials are missing in ${path.normalize(global.client.dirConfig)}. Related features are disabled until configured.`);
+	log.warn(
+		"CREDENTIALS",
+		`Google Drive/Gmail credentials are missing. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN (and optionally GMAIL_EMAIL) in Azure App Settings or ${path.normalize(global.client.dirConfig)}. Related features are disabled until configured.`
+	);
 
 let driveApi = null;
 if (hasGoogleDriveCredentials) {

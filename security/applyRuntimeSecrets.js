@@ -5,6 +5,24 @@ function toArray(input) {
 		.filter(Boolean);
 }
 
+function normalizeSecret(value) {
+	const text = String(value || "").trim();
+	if (!text)
+		return "";
+	if ((text.startsWith("\"") && text.endsWith("\"")) || (text.startsWith("'") && text.endsWith("'")))
+		return text.slice(1, -1).trim();
+	return text;
+}
+
+function firstEnv(keys = []) {
+	for (const key of keys) {
+		const value = normalizeSecret(process.env[key]);
+		if (value)
+			return value;
+	}
+	return "";
+}
+
 function applyRuntimeSecrets(config = {}, configCommands = {}) {
 	const nextConfig = config;
 	const nextConfigCommands = configCommands;
@@ -28,16 +46,22 @@ function applyRuntimeSecrets(config = {}, configCommands = {}) {
 	if (process.env.ADMIN_BOT_IDS)
 		nextConfig.adminBot = toArray(process.env.ADMIN_BOT_IDS);
 
-	if (process.env.GMAIL_EMAIL)
-		nextConfig.credentials.gmailAccount.email = process.env.GMAIL_EMAIL;
-	if (process.env.GOOGLE_CLIENT_ID)
-		nextConfig.credentials.gmailAccount.clientId = process.env.GOOGLE_CLIENT_ID;
-	if (process.env.GOOGLE_CLIENT_SECRET)
-		nextConfig.credentials.gmailAccount.clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-	if (process.env.GOOGLE_REFRESH_TOKEN)
-		nextConfig.credentials.gmailAccount.refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-	if (process.env.GOOGLE_API_KEY)
-		nextConfig.credentials.gmailAccount.apiKey = process.env.GOOGLE_API_KEY;
+	const gmailEmail = firstEnv(["GMAIL_EMAIL", "GOOGLE_GMAIL_EMAIL", "GMAIL_ADDRESS"]);
+	const googleClientId = firstEnv(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENTID", "GMAIL_CLIENT_ID"]);
+	const googleClientSecret = firstEnv(["GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENTSECRET", "GMAIL_CLIENT_SECRET"]);
+	const googleRefreshToken = firstEnv(["GOOGLE_REFRESH_TOKEN", "GOOGLE_REFRESHTOKEN", "GMAIL_REFRESH_TOKEN"]);
+	const googleApiKey = firstEnv(["GOOGLE_API_KEY", "GOOGLE_APIKEY", "GEMINI_API_KEY"]);
+
+	if (gmailEmail)
+		nextConfig.credentials.gmailAccount.email = gmailEmail;
+	if (googleClientId)
+		nextConfig.credentials.gmailAccount.clientId = googleClientId;
+	if (googleClientSecret)
+		nextConfig.credentials.gmailAccount.clientSecret = googleClientSecret;
+	if (googleRefreshToken)
+		nextConfig.credentials.gmailAccount.refreshToken = googleRefreshToken;
+	if (googleApiKey)
+		nextConfig.credentials.gmailAccount.apiKey = googleApiKey;
 
 	if (process.env.RECAPTCHA_SITE_KEY)
 		nextConfig.credentials.gRecaptcha.siteKey = process.env.RECAPTCHA_SITE_KEY;

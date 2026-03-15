@@ -141,29 +141,40 @@ module.exports = async (api) => {
 		refreshToken
 	} = gmailAccount;
 
-	const OAuth2 = google.auth.OAuth2;
-	const OAuth2_client = new OAuth2(clientId, clientSecret);
-	OAuth2_client.setCredentials({ refresh_token: refreshToken });
-	let accessToken;
-	try {
-		accessToken = await OAuth2_client.getAccessToken();
-	}
-	catch (err) {
-		throw new Error(getText("Goat", "googleApiRefreshTokenExpired"));
-	}
-
-	const transporter = nodemailer.createTransport({
-		host: "smtp.gmail.com",
-		service: "Gmail",
-		auth: {
-			type: "OAuth2",
-			user: email,
-			clientId,
-			clientSecret,
-			refreshToken,
-			accessToken
+	const hasMailCredentials = !!(email && clientId && clientSecret && refreshToken);
+	let transporter = {
+		sendMail: async () => {
+			throw new Error("Email is not configured. Set GMAIL_EMAIL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN.");
 		}
-	});
+	};
+	if (hasMailCredentials) {
+		const OAuth2 = google.auth.OAuth2;
+		const OAuth2_client = new OAuth2(clientId, clientSecret);
+		OAuth2_client.setCredentials({ refresh_token: refreshToken });
+		let accessToken;
+		try {
+			accessToken = await OAuth2_client.getAccessToken();
+			transporter = nodemailer.createTransport({
+				host: "smtp.gmail.com",
+				service: "Gmail",
+				auth: {
+					type: "OAuth2",
+					user: email,
+					clientId,
+					clientSecret,
+					refreshToken,
+					accessToken
+				}
+			});
+		}
+		catch (_err) {
+			const tokenErr = getText("Goat", "googleApiTokenExpired");
+			utils.log.warn("DASHBOARD", tokenErr.includes("Can't find text") ? "Google API refresh token is invalid/expired. Dashboard email features are disabled until credentials are fixed." : tokenErr);
+		}
+	}
+	else {
+		utils.log.warn("DASHBOARD", "Gmail OAuth credentials are missing. Dashboard email features are disabled.");
+	}
 
 
 	const {
