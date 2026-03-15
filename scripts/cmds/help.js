@@ -99,22 +99,13 @@ module.exports = {
 			roleText1setRole: "1 (set role, quản trị viên nhóm)",
 			pageNotFound: "Trang %1 không tồn tại"
 		},
-		en: {
-			help: "╭─────────────⭓"
-				+ "\n%1"
-				+ "\n├─────⭔"
-				+ "\n│ Page [ %2/%3 ]"
-				+ "\n│ Currently, the bot has %4 commands that can be used"
-				+ "\n│ » Type %5help <page> to view the command list"
-				+ "\n│ » Type %5help to view the details of how to use that command"
-				+ "\n├────────⭔"
-				+ "\n│ %6"
-				+ "\n╰─────────────⭓",
-			help2: "%1├───────⭔"
-				+ "\n│ » Currently, the bot has %2 commands that can be used"
-				+ "\n│ » Type %3help <command name> to view the details of how to use that command"
-				+ "\n│ %4"
-				+ "\n╰─────────────⭓",
+			en: {
+				help: "Help",
+				help2: "%1├───────⭔"
+					+ "\n│ » Currently, the bot has %2 commands that can be used"
+					+ "\n│ » Type %3help <command name> to view the details of how to use that command"
+					+ "\n│ %4"
+					+ "\n╰─────────────⭓",
 			commandNotFound: "Command \"%1\" does not exist",
 			getInfoCommand: "╭── NAME ────⭓"
 				+ "\n│ %1"
@@ -155,14 +146,18 @@ module.exports = {
 			doNotHave: "Do not have",
 			roleText0: "0 (All users)",
 			roleText1: "1 (Group administrators)",
-			roleText2: "2 (Admin bot)",
-			roleText0setRole: "0 (set role, all users)",
-			roleText1setRole: "1 (set role, group administrators)",
-			pageNotFound: "Page %1 does not exist"
-		}
-	},
+				roleText2: "2 (Admin bot)",
+				roleText0setRole: "0 (set role, all users)",
+				roleText1setRole: "1 (set role, group administrators)",
+				pageNotFound: "Page %1 does not exist",
+				helpModernTitle: "HELP CENTER",
+				helpModernMeta: "Page %1/%2 | Commands: %3",
+				helpModernHint: "Reply with: next | prev | <page number>",
+				helpModernTip: "Tip: %1help <command> for command details"
+			}
+		},
 
-	onStart: async function ({ message, args, event, threadsData, getLang, role, globalData }) {
+		onStart: async function ({ message, args, event, threadsData, getLang, role, globalData, commandName }) {
 		const langCode = await threadsData.get(event.threadID, "data.lang") || global.GoatBot.config.language;
 		let customLang = {};
 		const pathCustomLang = path.normalize(`${process.cwd()}/languages/cmds/${langCode}.js`);
@@ -175,14 +170,14 @@ module.exports = {
 		let sortHelp = threadData.settings.sortHelp || "name";
 		if (!["category", "name"].includes(sortHelp))
 			sortHelp = "name";
-		const commandName = (args[0] || "").toLowerCase();
-		let command = commands.get(commandName) || commands.get(aliases.get(commandName));
+			const inputCommandName = (args[0] || "").toLowerCase();
+			let command = commands.get(inputCommandName) || commands.get(aliases.get(inputCommandName));
 		const aliasesData = threadData.data.aliases || {
 			// uid: ["userid", "id"]
 		};
 		if (!command) {
 			for (const cmdName in aliasesData) {
-				if (aliasesData[cmdName].includes(commandName)) {
+					if (aliasesData[cmdName].includes(inputCommandName)) {
 					command = commands.get(cmdName);
 					break;
 				}
@@ -196,7 +191,7 @@ module.exports = {
 			// 	aliases: ["uid", "id]
 			// }]
 			for (const item of globalAliasesData) {
-				if (item.aliases.includes(commandName)) {
+					if (item.aliases.includes(inputCommandName)) {
 					command = commands.get(item.commandName);
 					break;
 				}
@@ -207,9 +202,9 @@ module.exports = {
 		if (!command && !args[0] || !isNaN(args[0])) {
 			const arrayInfo = [];
 			let msg = "";
-			if (sortHelp == "name") {
-				const page = parseInt(args[0]) || 1;
-				const numberOfOnePage = 30;
+				if (sortHelp == "name") {
+					const page = parseInt(args[0]) || 1;
+					const numberOfOnePage = 30;
 				for (const [name, value] of commands) {
 					if (value.config.role > 1 && role < value.config.role)
 						continue;
@@ -230,15 +225,23 @@ module.exports = {
 
 				arrayInfo.sort((a, b) => a.data - b.data); // sort by name
 				arrayInfo.sort((a, b) => a.priority > b.priority ? -1 : 1); // sort by priority
-				const { allPage, totalPage } = global.utils.splitPage(arrayInfo, numberOfOnePage);
-				if (page < 1 || page > totalPage)
-					return message.reply(getLang("pageNotFound", page));
+					const { allPage, totalPage } = global.utils.splitPage(arrayInfo, numberOfOnePage);
+					if (page < 1 || page > totalPage)
+						return message.reply(getLang("pageNotFound", page));
 
-				const returnArray = allPage[page - 1] || [];
-				const startNumber = (page - 1) * numberOfOnePage + 1;
-				msg += (returnArray || []).reduce((text, item, index) => text += `│ ${index + startNumber}${index + startNumber < 10 ? " " : ""}. ${item.data}\n`, '').slice(0, -1);
-				await message.reply(getLang("help", msg, page, totalPage, commands.size, prefix, doNotDelete));
-			}
+					await sendModernHelpPage({
+						message,
+						getLang,
+						prefix,
+						page,
+						totalPage,
+						allPage,
+						numberOfOnePage,
+						totalCommands: arrayInfo.length,
+						commandName,
+						author: String(event.senderID)
+					});
+				}
 			else if (sortHelp == "category") {
 				for (const [, value] of commands) {
 					if (value.config.role > 1 && role < value.config.role)
@@ -387,10 +390,50 @@ module.exports = {
 				}
 			}
 
-			return message.reply(formSendMessage);
+				return message.reply(formSendMessage);
+			}
+		},
+
+		onReply: async function ({ message, event, Reply, getLang, commandName }) {
+			if (Reply.commandName !== commandName)
+				return;
+			if (Reply.type !== "helpPagination")
+				return;
+			if (String(event.senderID) !== String(Reply.author))
+				return;
+
+			const body = String(event.body || "").trim().toLowerCase();
+			let targetPage = Number(Reply.currentPage || 1);
+
+			if (["next", "n", ">", ">>"].includes(body))
+				targetPage += 1;
+			else if (["prev", "previous", "p", "<", "<<"].includes(body))
+				targetPage -= 1;
+			else {
+				const parsed = parseInt(body, 10);
+				if (!isNaN(parsed))
+					targetPage = parsed;
+				else
+					return;
+			}
+
+			if (targetPage < 1 || targetPage > Number(Reply.totalPage || 1))
+				return message.reply(getLang("pageNotFound", targetPage));
+
+			return sendModernHelpPage({
+				message,
+				getLang,
+				prefix: Reply.prefix,
+				page: targetPage,
+				totalPage: Reply.totalPage,
+				allPage: Reply.allPage,
+				numberOfOnePage: Reply.numberOfOnePage,
+				totalCommands: Reply.totalCommands,
+				commandName,
+				author: Reply.author
+			});
 		}
-	}
-};
+	};
 
 function checkLangObject(data, langCode) {
 	if (typeof data == "string")
@@ -406,4 +449,51 @@ function cropContent(content, max) {
 		content = content + "...";
 	}
 	return content;
+}
+
+async function sendModernHelpPage({
+	message,
+	getLang,
+	prefix,
+	page,
+	totalPage,
+	allPage,
+	numberOfOnePage,
+	totalCommands,
+	commandName,
+	author
+}) {
+	const pageItems = allPage[page - 1] || [];
+	const startNumber = (page - 1) * numberOfOnePage + 1;
+	const lines = pageItems.map((item, index) => {
+		const n = index + startNumber;
+		return `${String(n).padStart(2, "0")}. ${item.data}`;
+	});
+
+	const body = [
+		`${getLang("helpModernTitle")}`,
+		`${getLang("helpModernMeta", page, totalPage, totalCommands)}`,
+		"",
+		...(lines.length ? lines : ["No commands on this page"]),
+		"",
+		getLang("helpModernHint"),
+		getLang("helpModernTip", prefix)
+	].join("\n");
+
+	return message.reply(body, (err, info) => {
+		if (err || !info?.messageID)
+			return;
+		global.GoatBot.onReply.set(info.messageID, {
+			commandName,
+			messageID: info.messageID,
+			type: "helpPagination",
+			author,
+			prefix,
+			currentPage: page,
+			totalPage,
+			allPage,
+			numberOfOnePage,
+			totalCommands
+		});
+	});
 }
