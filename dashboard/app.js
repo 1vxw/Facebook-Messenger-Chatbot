@@ -988,12 +988,20 @@ module.exports = async (api) => {
 		}
 	}
 
-	let dashBoardUrl = `https://${process.env.REPL_OWNER
-		? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-		: process.env.API_SERVER_EXTERNAL == "https://api.glitch.com"
-			? `${process.env.PROJECT_DOMAIN}.glitch.me`
-			: `localhost:${runningPort}`}`;
-	dashBoardUrl.includes("localhost") && (dashBoardUrl = dashBoardUrl.replace("https", "http"));
+	let dashBoardUrl = String(process.env.PUBLIC_URL || "").trim();
+	if (!dashBoardUrl) {
+		if (process.env.WEBSITE_HOSTNAME)
+			dashBoardUrl = `https://${process.env.WEBSITE_HOSTNAME}`;
+		else if (process.env.WEBSITE_SITE_NAME)
+			dashBoardUrl = `https://${process.env.WEBSITE_SITE_NAME}.azurewebsites.net`;
+		else if (process.env.REPL_OWNER)
+			dashBoardUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+		else if (process.env.API_SERVER_EXTERNAL == "https://api.glitch.com")
+			dashBoardUrl = `https://${process.env.PROJECT_DOMAIN}.glitch.me`;
+		else
+			dashBoardUrl = `http://localhost:${runningPort}`;
+	}
+	dashBoardUrl = dashBoardUrl.replace(/\/+$/, "");
 	global.GoatBot.dashboardPublicBaseUrl = dashBoardUrl;
 	utils.log.info("DASHBOARD", `Dashboard is running: ${dashBoardUrl}`);
 	if (config.serverUptime.socket.enable == true)
