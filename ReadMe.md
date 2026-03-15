@@ -1,6 +1,6 @@
 # Facebook Messenger Chatbot
 
-Professional project documentation for the `Facebook-Messenger-Chatbot` repository.
+Project documentation for `Facebook-Messenger-Chatbot`.
 
 ## 1. Project Overview
 
