@@ -2,6 +2,14 @@
 
 Project documentation for `Facebook-Messenger-Chatbot`.
 
+This project was forked from another repository. I modified it to fit my needs because internet access is a big problem for me at school. Since I spend a lot of time on Messenger, I thought it would be convenient if I could do most of my work there, especially since sending messages on Messenger is free.
+
+For this reason, I forked the source code and customized it. It can now fetch my Google Classroom tasks and even automate submissions.
+
+By deploying this on a cloud server, I can do things with my limited internet connection.
+
+You can fork or clone this repository and modify it for your own use.
+
 ## 1. Project Overview
 
 This project is a Node.js-based Messenger chatbot platform with:
