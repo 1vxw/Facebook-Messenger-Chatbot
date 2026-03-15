@@ -205,32 +205,21 @@ if (config.autoRestart) {
 
 (async () => {
 	// ———————————————— SETUP MAIL ———————————————— //
-	const { gmailAccount } = config.credentials;
+	const gmailAccount = config?.credentials?.gmailAccount || {};
 	const { email, clientId, clientSecret, refreshToken } = gmailAccount;
-	const OAuth2 = google.auth.OAuth2;
-	const OAuth2_client = new OAuth2(clientId, clientSecret);
-	OAuth2_client.setCredentials({ refresh_token: refreshToken });
-	let accessToken;
-	try {
-		accessToken = await OAuth2_client.getAccessToken();
-	}
-	catch (err) {
-		throw new Error(getText("Goat", "googleApiTokenExpired"));
-	}
-	const transporter = nodemailer.createTransport({
-		host: 'smtp.gmail.com',
-		service: 'Gmail',
-		auth: {
-			type: 'OAuth2',
-			user: email,
-			clientId,
-			clientSecret,
-			refreshToken,
-			accessToken
-		}
-	});
+	const hasMailCredentials = !!(email && clientId && clientSecret && refreshToken);
 
-	async function sendMail({ to, subject, text, html, attachments }) {
+	if (hasMailCredentials) {
+		const OAuth2 = google.auth.OAuth2;
+		const OAuth2_client = new OAuth2(clientId, clientSecret);
+		OAuth2_client.setCredentials({ refresh_token: refreshToken });
+		let accessToken;
+		try {
+			accessToken = await OAuth2_client.getAccessToken();
+		}
+		catch (err) {
+			throw new Error(getText("Goat", "googleApiTokenExpired"));
+		}
 		const transporter = nodemailer.createTransport({
 			host: 'smtp.gmail.com',
 			service: 'Gmail',
@@ -243,20 +232,41 @@ if (config.autoRestart) {
 				accessToken
 			}
 		});
-		const mailOptions = {
-			from: email,
-			to,
-			subject,
-			text,
-			html,
-			attachments
-		};
-		const info = await transporter.sendMail(mailOptions);
-		return info;
-	}
 
-	global.utils.sendMail = sendMail;
-	global.utils.transporter = transporter;
+		async function sendMail({ to, subject, text, html, attachments }) {
+			const transporter = nodemailer.createTransport({
+				host: 'smtp.gmail.com',
+				service: 'Gmail',
+				auth: {
+					type: 'OAuth2',
+					user: email,
+					clientId,
+					clientSecret,
+					refreshToken,
+					accessToken
+				}
+			});
+			const mailOptions = {
+				from: email,
+				to,
+				subject,
+				text,
+				html,
+				attachments
+			};
+			const info = await transporter.sendMail(mailOptions);
+			return info;
+		}
+
+		global.utils.sendMail = sendMail;
+		global.utils.transporter = transporter;
+	}
+	else {
+		log.warn("CREDENTIALS", "Gmail OAuth credentials are missing. Email notifications and mail-based dashboard flows are disabled.");
+		global.utils.sendMail = async () => {
+			throw new Error("Email is not configured. Set GMAIL_EMAIL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN.");
+		};
+	}
 
 	// ———————————————— CHECK VERSION ———————————————— //
 	const { data: { version } } = await axios.get("https://raw.githubusercontent.com/ntkhang03/Goat-Bot-V2/main/package.json");
@@ -270,8 +280,13 @@ if (config.autoRestart) {
 			colors.hex("#eb6a07", "node update")
 		));
 	// —————————— CHECK FOLDER GOOGLE DRIVE —————————— //
-	const parentIdGoogleDrive = await utils.drive.checkAndCreateParentFolder("GoatBot");
-	utils.drive.parentID = parentIdGoogleDrive;
+	if (hasMailCredentials) {
+		const parentIdGoogleDrive = await utils.drive.checkAndCreateParentFolder("GoatBot");
+		utils.drive.parentID = parentIdGoogleDrive;
+	}
+	else {
+		utils.log.warn("CREDENTIALS", "Google Drive integration disabled because Gmail OAuth credentials are missing.");
+	}
 	// ———————————————————— LOGIN ———————————————————— //
 	require(`./bot/login/login${NODE_ENV === 'development' ? '.dev.js' : '.js'}`);
 })();

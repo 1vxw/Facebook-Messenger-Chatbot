@@ -16,27 +16,21 @@ const { isHexColor, colors } = require("./func/colors.js");
 const Prism = require("./func/prism.js");
 
 const { config } = global.GoatBot;
-const { gmailAccount } = config.credentials;
+const gmailAccount = config?.credentials?.gmailAccount || {};
 const { clientId, clientSecret, refreshToken, apiKey: googleApiKey } = gmailAccount;
-if (!clientId) {
-	log.err("CREDENTIALS", `Please provide a valid clientId in file ${path.normalize(global.client.dirConfig)}`);
-	process.exit();
-}
-if (!clientSecret) {
-	log.err("CREDENTIALS", `Please provide a valid clientSecret in file ${path.normalize(global.client.dirConfig)}`);
-	process.exit();
-}
-if (!refreshToken) {
-	log.err("CREDENTIALS", `Please provide a valid refreshToken in file ${path.normalize(global.client.dirConfig)}`);
-	process.exit();
-}
+const hasGoogleDriveCredentials = !!(clientId && clientSecret && refreshToken);
+if (!hasGoogleDriveCredentials)
+	log.warn("CREDENTIALS", `Google Drive/Gmail credentials are missing in ${path.normalize(global.client.dirConfig)}. Related features are disabled until configured.`);
 
-const oauth2ClientForGGDrive = new google.auth.OAuth2(clientId, clientSecret, "https://developers.google.com/oauthplayground");
-oauth2ClientForGGDrive.setCredentials({ refresh_token: refreshToken });
-const driveApi = google.drive({
-	version: 'v3',
-	auth: oauth2ClientForGGDrive
-});
+let driveApi = null;
+if (hasGoogleDriveCredentials) {
+	const oauth2ClientForGGDrive = new google.auth.OAuth2(clientId, clientSecret, "https://developers.google.com/oauthplayground");
+	oauth2ClientForGGDrive.setCredentials({ refresh_token: refreshToken });
+	driveApi = google.drive({
+		version: 'v3',
+		auth: oauth2ClientForGGDrive
+	});
+}
 const word = [
 	'A', 'Á', 'À', 'Ả', 'Ã', 'Ạ', 'a', 'á', 'à', 'ả', 'ã', 'ạ',
 	'Ă', 'Ắ', 'Ằ', 'Ẳ', 'Ẵ', 'Ặ', 'ă', 'ắ', 'ằ', 'ẳ', 'ẵ', 'ặ',
@@ -901,6 +895,8 @@ const drive = {
 	default: driveApi,
 	parentID: "",
 	async uploadFile(fileName, mimeType, file) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN.");
 		if (!file && typeof fileName === "string") {
 			file = mimeType;
 			mimeType = undefined;
@@ -927,6 +923,8 @@ const drive = {
 	},
 
 	async deleteFile(id) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured.");
 		if (!id || typeof id !== "string")
 			throw new Error('The first argument (id) must be a string');
 		try {
@@ -947,6 +945,8 @@ const drive = {
 	},
 
 	async getFile(id, responseType) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured.");
 		if (!id || typeof id !== "string")
 			throw new Error('The first argument (id) must be a string');
 		if (!responseType)
@@ -974,6 +974,8 @@ const drive = {
 	},
 
 	async getFileName(id) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured.");
 		if (!id || typeof id !== "string")
 			throw new Error('The first argument (id) must be a string');
 		const { fileNames: tempFileNames } = global.temp.filesOfGoogleDrive;
@@ -993,6 +995,8 @@ const drive = {
 	},
 
 	async makePublic(id) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured.");
 		if (!id || typeof id !== "string")
 			throw new Error('The first argument (id) must be a string');
 		try {
@@ -1013,6 +1017,8 @@ const drive = {
 	},
 
 	async checkAndCreateParentFolder(folderName) {
+		if (!driveApi)
+			throw new Error("Google Drive is not configured.");
 		if (!folderName || typeof folderName !== "string")
 			throw new Error('The first argument (folderName) must be a string');
 		let parentID;
