@@ -202,6 +202,19 @@ const { dirAccount } = global.client;
 // const { config, configCommands } = global.GoatBot;
 const { facebookAccount } = global.GoatBot.config;
 
+function ensureAccountFileExists() {
+	try {
+		if (!existsSync(dirAccount)) {
+			fs.ensureDirSync(path.dirname(dirAccount));
+			writeFileSync(dirAccount, "[]");
+			log.warn("LOGIN FACEBOOK", `Created missing ${path.basename(dirAccount)} at startup.`);
+		}
+	}
+	catch (err) {
+		log.warn("LOGIN FACEBOOK", `Cannot initialize ${path.basename(dirAccount)}: ${err.message || err}`);
+	}
+}
+
 function responseUptimeSuccess(req, res) {
 	res.type('json').send({
 		status: "success",
@@ -246,7 +259,8 @@ global.responseUptimeError = responseUptimeError;
 
 global.statusAccountBot = 'good';
 let changeFbStateByCode = false;
-let latestChangeContentAccount = fs.statSync(dirAccount).mtimeMs;
+ensureAccountFileExists();
+let latestChangeContentAccount = existsSync(dirAccount) ? fs.statSync(dirAccount).mtimeMs : 0;
 let dashBoardIsRunning = false;
 let browserRenewTimer = null;
 let bootRetryWithBrowserRenew = false;

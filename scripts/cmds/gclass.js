@@ -88,6 +88,50 @@ function getConnectPrompt(getLang, senderID) {
 	return getLang("connectFallbackManual");
 }
 
+function sendApiMessage(api, payload, threadID, messageID) {
+	return new Promise((resolve, reject) => {
+		if (!api || typeof api.sendMessage !== "function")
+			return resolve(false);
+		api.sendMessage(payload, threadID, (err) => {
+			if (err)
+				return reject(err);
+			resolve(true);
+		}, messageID);
+	});
+}
+
+async function sendConnectButtonMessage({ api, event, getLang, senderID }) {
+	const link = createConnectLink(senderID);
+	if (!link)
+		return false;
+
+	const payload = {
+		attachment: {
+			type: "template",
+			payload: {
+				template_type: "button",
+				text: getLang("connectButtonText"),
+				buttons: [
+					{
+						type: "web_url",
+						url: link,
+						title: getLang("connectButtonTitle"),
+						webview_height_ratio: "full"
+					}
+				]
+			}
+		}
+	};
+
+	try {
+		await sendApiMessage(api, payload, event.threadID, event.messageID);
+		return true;
+	}
+	catch (_e) {
+		return false;
+	}
+}
+
 function summarizeTokenStatus(token) {
 	if (!token)
 		return { connected: false, status: "not_connected" };
@@ -913,10 +957,12 @@ module.exports = {
 		}
 	},
 	langs: {
-		en: {
+			en: {
 			usage: "Google Classroom command menu\n\n1) First-time setup\n- gclass connect : Link your Google account\n- gclass status : Check if account is linked\n- gclass logout : Remove linked account\n\n2) View your work\n- gclass courses : Show your active courses\n- gclass tasks [course] : Show pending tasks\n- gclass gettasktext <taskIndex> : Show full assignment text\n- gclass tstatus <taskIndex> : Show task status\n- gclass getdocs <taskIndex> : Download attached/submitted docs\n\n3) Complete and submit\n- gclass automate [course] : Pick one task and manage it via reply\n- gclass doall [2|3] [course] : Submit first 2 or 3 pending tasks\n- gclass unsubmit <taskIndex> : Reclaim a turned-in task\n\nTips:\n- [course] can be course index, course id, or part of course name\n- [taskIndex] is from the number shown in gclass tasks\n\nLegacy/manual login:\n- gclass login\n- gclass authcode <code>",
-			connectLinkReady: "Tap this link to connect your Google Classroom account:\n%1\n\nThis link expires in 10 minutes.",
-			connectFallbackManual: "Public callback URL is not configured on this bot yet. Use manual mode:\n1) Send: gclass login\n2) After Google redirects, copy the code\n3) Send: gclass authcode <code>",
+				connectLinkReady: "Tap this link to connect your Google Classroom account:\n%1\n\nThis link expires in 10 minutes.",
+				connectButtonText: "Connect your Google Classroom account securely using the button below. This link expires in 10 minutes.",
+				connectButtonTitle: "Open Connect Page",
+				connectFallbackManual: "Public callback URL is not configured on this bot yet. Use manual mode:\n1) Send: gclass login\n2) After Google redirects, copy the code\n3) Send: gclass authcode <code>",
 			statusConnected: "Google Classroom: Connected (%1).",
 			statusNotConnected: "Google Classroom: Not connected.\n%1",
 			loginLegacy: "Legacy manual mode:\nOpen this URL, authorize Google, then send: gclass authcode <code>\n%1",
@@ -969,7 +1015,7 @@ module.exports = {
 		return module.exports.onStart({ ...ctx, args, commandName: "gclass" });
 	},
 
-	onStart: async function ({ args, event, message, getLang, commandName }) {
+		onStart: async function ({ args, event, message, getLang, commandName, api }) {
 		const sub = (args[0] || "").trim().toLowerCase();
 		const isSub = (...names) => names.includes(sub);
 		if (!sub)
@@ -981,17 +1027,23 @@ module.exports = {
 			if (isSub("help", "h", "menu"))
 				return message.reply(getLang("usage"));
 
-			if (isSub("status")) {
-				const token = await getUserToken(senderID);
-				const summary = summarizeTokenStatus(token);
-				if (!summary.connected)
-					return message.reply(getLang("statusNotConnected", getConnectPrompt(getLang, senderID)));
-				return message.reply(getLang("statusConnected", summary.status === "expiring_soon" ? "token expiring soon" : "token active"));
-			}
+				if (isSub("status")) {
+					const token = await getUserToken(senderID);
+					const summary = summarizeTokenStatus(token);
+					if (!summary.connected) {
+						const text = getLang("statusNotConnected", getConnectPrompt(getLang, senderID));
+						await message.reply(text);
+						await sendConnectButtonMessage({ api, event, getLang, senderID });
+						return;
+					}
+					return message.reply(getLang("statusConnected", summary.status === "expiring_soon" ? "token expiring soon" : "token active"));
+				}
 
-			if (isSub("connect")) {
-				return message.reply(getConnectPrompt(getLang, senderID));
-			}
+				if (isSub("connect")) {
+					await message.reply(getConnectPrompt(getLang, senderID));
+					await sendConnectButtonMessage({ api, event, getLang, senderID });
+					return;
+				}
 
 			if (sub === "login") {
 				const oauth2 = createOAuthClient(DEFAULT_OAUTH_REDIRECT_URI);
@@ -1026,9 +1078,13 @@ module.exports = {
 				return message.reply(getLang("logoutSuccess"));
 			}
 
-			const hasToken = await getUserToken(senderID);
-			if (!hasToken)
-				return message.reply(getLang("notLoggedIn", getConnectPrompt(getLang, senderID)));
+				const hasToken = await getUserToken(senderID);
+				if (!hasToken) {
+					const text = getLang("notLoggedIn", getConnectPrompt(getLang, senderID));
+					await message.reply(text);
+					await sendConnectButtonMessage({ api, event, getLang, senderID });
+					return;
+				}
 
 			if (isSub("courses", "getcourses")) {
 				const courses = await fetchActiveCourses(senderID);
@@ -1143,12 +1199,17 @@ module.exports = {
 			return message.reply(getLang("subCommandUnknown", getLang("usage")));
 		}
 		catch (err) {
-			if (isInvalidGrantError(err)) {
-				await removeUserToken(senderID);
-				return message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
-			}
-			if (err.message === "NOT_LOGGED_IN")
-				return message.reply(getLang("notLoggedIn", getConnectPrompt(getLang, senderID)));
+				if (isInvalidGrantError(err)) {
+					await removeUserToken(senderID);
+					await message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
+					await sendConnectButtonMessage({ api, event, getLang, senderID });
+					return;
+				}
+				if (err.message === "NOT_LOGGED_IN") {
+					await message.reply(getLang("notLoggedIn", getConnectPrompt(getLang, senderID)));
+					await sendConnectButtonMessage({ api, event, getLang, senderID });
+					return;
+				}
 			if (err?.message?.includes("Insufficient Permission") || err?.response?.status === 403) {
 				const details = err?.response?.data?.error?.message || err?.message || "Forbidden";
 				return message.reply(getLang("insufficientScope", details));
@@ -1325,12 +1386,14 @@ module.exports = {
 			return message.reply("Reply with: make, submit, unsubmit, docs, or cancel.");
 			}
 		}
-		catch (err) {
-			if (isInvalidGrantError(err)) {
-				await removeUserToken(senderID);
-				return message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
+			catch (err) {
+				if (isInvalidGrantError(err)) {
+					await removeUserToken(senderID);
+					await message.reply(getLang("tokenExpired", getConnectPrompt(getLang, senderID)));
+					await sendConnectButtonMessage({ api, event, getLang, senderID });
+					return;
+				}
+				throw err;
 			}
-			throw err;
 		}
-	}
-};
+	};
