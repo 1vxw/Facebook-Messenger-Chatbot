@@ -143,6 +143,7 @@ Reference template: `.env.example`
 - `GROQ_MODEL`
 - `BINGX_API_KEY` (optional command)
 - `BINGX_SECRET_KEY` (optional command)
+- `GITHUB_TOKEN` (optional, used by `github` command)
 
 ### 8.4 Dashboard Security
 

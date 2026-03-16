@@ -1,4 +1,4 @@
-const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
+const { readdirSync, readFileSync, writeFileSync, existsSync, ensureDirSync } = require("fs-extra");
 const path = require("path");
 const exec = (cmd, options) => new Promise((resolve, reject) => {
 	require("child_process").exec(cmd, options, (err, stdout) => {
@@ -12,6 +12,10 @@ const { GoatBot } = global;
 const { configCommands } = GoatBot;
 const regExpCheckPackage = /require(\s+|)\((\s+|)[`'"]([^`'"]+)[`'"](\s+|)\)/g;
 const packageAlready = [];
+const defaultPersistRoot = process.platform === "win32"
+	? path.normalize(`${process.cwd()}/data/vxw`)
+	: "/home/data/vxw";
+const persistRoot = process.env.GOATBOT_PERSIST_DIR || defaultPersistRoot;
 // const spinner = '\\|/-';
 const spinner = [
 	'⠋', '⠙', '⠹',
@@ -56,19 +60,35 @@ module.exports = async function (api, threadModel, userModel, dashBoardModel, gl
 		}
 
 		const fullPathModules = path.normalize(process.cwd() + `/scripts/${folderModules}`);
-		const Files = readdirSync(fullPathModules)
-			.filter(file =>
-				file.endsWith(".js") &&
-				!file.endsWith("eg.js") && // ignore example file
-				(process.env.NODE_ENV == "development" ? true : !file.match(/(dev)\.js$/g)) && // ignore dev file in production mode
-				!configCommands[folderModules == "cmds" ? "commandUnload" : "commandEventUnload"]?.includes(file) // ignore unload command
-			);
+		const persistPathModules = path.normalize(`${persistRoot}/${folderModules}`);
+		const searchPaths = [fullPathModules];
+		if (folderModules == "cmds") {
+			ensureDirSync(persistPathModules);
+			searchPaths.push(persistPathModules);
+		}
+
+		const fileMap = new Map();
+		for (const dirPath of searchPaths) {
+			if (!existsSync(dirPath))
+				continue;
+			const files = readdirSync(dirPath)
+				.filter(file =>
+					file.endsWith(".js") &&
+					!file.endsWith("eg.js") && // ignore example file
+					(process.env.NODE_ENV == "development" ? true : !file.match(/(dev)\.js$/g)) && // ignore dev file in production mode
+					!configCommands[folderModules == "cmds" ? "commandUnload" : "commandEventUnload"]?.includes(file) // ignore unload command
+				);
+			for (const file of files)
+				fileMap.set(file, { file, pathCommand: path.normalize(`${dirPath}/${file}`) });
+		}
+
+		const Files = [...fileMap.values()];
 
 		const commandError = [];
 		let commandLoadSuccess = 0;
 
-		for (const file of Files) {
-			const pathCommand = path.normalize(fullPathModules + "/" + file);
+		for (const fileEntry of Files) {
+			const { file, pathCommand } = fileEntry;
 			try {
 				// ————————————————— CHECK PACKAGE ————————————————— //
 				const contentFile = readFileSync(pathCommand, "utf8");

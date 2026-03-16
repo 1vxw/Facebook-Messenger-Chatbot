@@ -85,6 +85,12 @@ function applyRuntimeSecrets(config = {}, configCommands = {}) {
 		}
 	}
 
+	const githubToken = firstEnv(["GITHUB_TOKEN", "GH_TOKEN"]);
+	if (githubToken) {
+		nextConfigCommands.envCommands.github = nextConfigCommands.envCommands.github || {};
+		nextConfigCommands.envCommands.github.token = githubToken;
+	}
+
 	return {
 		config: nextConfig,
 		configCommands: nextConfigCommands
