@@ -7,6 +7,11 @@ const { client } = global;
 
 const { configCommands } = global.GoatBot;
 const { log, loading, removeHomeDir } = global.utils;
+const defaultPersistRoot = process.platform === "win32"
+	? path.normalize(`${process.cwd()}/data/vxw`)
+	: "/home/data/vxw";
+const persistRoot = process.env.GOATBOT_PERSIST_DIR || defaultPersistRoot;
+const persistCmdDir = path.normalize(`${persistRoot}/cmds`);
 
 function getDomain(url) {
 	const regex = /^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:/\n]+)/im;
@@ -22,6 +27,26 @@ function isURL(str) {
 	catch (e) {
 		return false;
 	}
+}
+
+function ensurePersistCmdDir() {
+	fs.ensureDirSync(persistCmdDir);
+	return persistCmdDir;
+}
+
+function resolveCommandPath(folder, fileName) {
+	const persistentPath = path.normalize(`${persistRoot}/${folder}/${fileName}.js`);
+	const basePath = path.normalize(`${process.cwd()}/scripts/${folder}/${fileName}.js`);
+
+	if (folder == "cmds" && fs.existsSync(persistentPath))
+		return persistentPath;
+	if (process.env.NODE_ENV == "development") {
+		const devPath = path.normalize(`${process.cwd()}/scripts/${folder}/${fileName}.dev.js`);
+		if (fs.existsSync(devPath))
+			return devPath;
+	}
+
+	return basePath;
 }
 
 module.exports = {
@@ -119,14 +144,18 @@ module.exports = {
 			|| (args[0] == "load" && args.length > 2)
 		) {
 			const fileNeedToLoad = args[0].toLowerCase() == "loadall" ?
-				fs.readdirSync(__dirname)
+				[
+					...fs.readdirSync(__dirname),
+					...(fs.existsSync(ensurePersistCmdDir()) ? fs.readdirSync(ensurePersistCmdDir()) : [])
+				]
 					.filter(file =>
 						file.endsWith(".js") &&
 						!file.match(/(eg)\.js$/g) &&
 						(process.env.NODE_ENV == "development" ? true : !file.match(/(dev)\.js$/g)) &&
 						!configCommands.commandUnload?.includes(file)
 					)
-					.map(item => item = item.split(".")[0]) :
+					.map(item => item = item.split(".")[0])
+					.filter((item, index, array) => array.indexOf(item) == index) :
 				args.slice(1);
 			const arraySucces = [];
 			const arrayFail = [];
@@ -220,7 +249,9 @@ module.exports = {
 			if (!rawCode)
 				return message.reply(getLang("invalidUrlOrCode"));
 
-			if (fs.existsSync(path.join(__dirname, fileName)))
+			const installDir = ensurePersistCmdDir();
+			const targetPath = path.join(installDir, fileName);
+			if (fs.existsSync(targetPath))
 				return message.reply(getLang("alreadExist"), (err, info) => {
 					global.GoatBot.onReaction.set(info.messageID, {
 						commandName,
@@ -235,8 +266,9 @@ module.exports = {
 				});
 			else {
 				const infoLoad = loadScripts("cmds", fileName, log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
+				const savedPath = infoLoad?.command?.location || targetPath;
 				infoLoad.status == "success" ?
-					message.reply(getLang("installed", infoLoad.name, path.join(__dirname, fileName).replace(process.cwd(), ""))) :
+					message.reply(getLang("installed", infoLoad.name, savedPath.replace(process.cwd(), ""))) :
 					message.reply(getLang("installedError", infoLoad.name, infoLoad.error.name, infoLoad.error.message));
 			}
 		}
@@ -250,8 +282,9 @@ module.exports = {
 		if (event.userID != author)
 			return;
 		const infoLoad = loadScripts("cmds", fileName, log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
+		const savedPath = infoLoad?.command?.location || path.join(ensurePersistCmdDir(), fileName);
 		infoLoad.status == "success" ?
-			message.reply(getLang("installed", infoLoad.name, path.join(__dirname, fileName).replace(process.cwd(), ""))) :
+			message.reply(getLang("installed", infoLoad.name, savedPath.replace(process.cwd(), ""))) :
 			message.reply(getLang("installedError", infoLoad.name, infoLoad.error.name, infoLoad.error.message));
 	}
 };
@@ -271,7 +304,9 @@ function loadScripts(folder, fileName, log, configCommands, api, threadModel, us
 	try {
 		if (rawCode) {
 			fileName = fileName.slice(0, -3);
-			fs.writeFileSync(path.normalize(`${process.cwd()}/scripts/${folder}/${fileName}.js`), rawCode);
+			const writeDir = folder == "cmds" ? ensurePersistCmdDir() : path.normalize(`${process.cwd()}/scripts/${folder}`);
+			fs.ensureDirSync(writeDir);
+			fs.writeFileSync(path.normalize(`${writeDir}/${fileName}.js`), rawCode);
 		}
 		const regExpCheckPackage = /require(\s+|)\((\s+|)[`'"]([^`'"]+)[`'"](\s+|)\)/g;
 		const { GoatBot } = global;
@@ -287,17 +322,7 @@ function loadScripts(folder, fileName, log, configCommands, api, threadModel, us
 			setMap = "eventCommands";
 			commandType = "event command";
 		}
-		// const pathCommand = path.normalize(path.normalize(process.cwd() + `/${folder}/${fileName}.js`));
-		let pathCommand;
-		if (process.env.NODE_ENV == "development") {
-			const devPath = path.normalize(process.cwd() + `/scripts/${folder}/${fileName}.dev.js`);
-			if (fs.existsSync(devPath))
-				pathCommand = devPath;
-			else
-				pathCommand = path.normalize(process.cwd() + `/scripts/${folder}/${fileName}.js`);
-		}
-		else
-			pathCommand = path.normalize(process.cwd() + `/scripts/${folder}/${fileName}.js`);
+		const pathCommand = resolveCommandPath(folder, fileName);
 
 		// ————————————————— CHECK PACKAGE ————————————————— //
 		let contentFile = fs.readFileSync(pathCommand, "utf8");
@@ -489,7 +514,7 @@ function loadScripts(folder, fileName, log, configCommands, api, threadModel, us
 }
 
 function unloadScripts(folder, fileName, configCommands, getLang) {
-	const pathCommand = `${process.cwd()}/scripts/${folder}/${fileName}.js`;
+	const pathCommand = resolveCommandPath(folder, fileName);
 	if (!fs.existsSync(pathCommand)) {
 		const err = new Error(getLang("missingFile", `${fileName}.js`));
 		err.name = "FileNotFound";
